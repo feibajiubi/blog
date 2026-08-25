@@ -386,6 +386,9 @@
     if (state.bubbleTimer) { clearTimeout(state.bubbleTimer); state.bubbleTimer = null }
     // 输入聚焦时不启动自动隐藏计时器
     if (state.inputFocused) return
+    // 只有 hover 预览模式才自动收起（8 秒）；
+    // 点击打开的对话/统计/历史内容永不自动消失，仅通过点击空白处关闭
+    if (state.bubbleSource !== 'hover') return
     state.bubbleTimer = setTimeout(hideBubble, 8000)
   }
 
