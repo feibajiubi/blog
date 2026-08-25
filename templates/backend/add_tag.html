@@ -1,0 +1,28 @@
+{% extends 'backend/backend.html' %}
+{% block page_content %}
+    <div class="col-md-10 col-md-offset-1">
+        <h3>已创建的标签</h3>
+        <div class="panel panel-default">
+            <div class="panel-body">
+                {% for tag_obj in tag_queryset %}
+                    <p style="font-size: 16px; margin: 8px 0;">
+                        <a href="/{{ username }}/tag/{{ tag_obj.name }}/">
+                            {{ tag_obj.name }}({{ tag_obj.count_num }})
+                        </a>
+                    </p>
+                {% empty %}
+                    <p>暂无标签</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <h3>添加新的标签</h3>
+        <form action="" method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <input type="text" name="tag" class="form-control" placeholder="请输入标签名称">
+            </div>
+            <input type="submit" value="添加" class="btn btn-primary">
+        </form>
+    </div>
+{% endblock %}

@@ -1,0 +1,12 @@
+a{
+    color: deeppink;
+}
+
+body{
+    background-image: url('/static/image/doro.jpg');
+    background-size: auto 100%;
+    background-repeat: no-repeat;
+    background-position: center top;
+    background-attachment: fixed;
+    background-color: white;
+}

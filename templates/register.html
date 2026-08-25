@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'bootstrap-3.4.1-dist\css\bootstrap.min.css' %}">
+    <script src="{% static 'js\jquery-3.7.1.min.js' %}"></script>
+    <script src="{% static 'bootstrap-3.4.1-dist\js\bootstrap.min.js' %}"></script>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-4 col-md-offset-4">
+            <h1 class="text-center">注册</h1>
+            <form id="myform">
+            {% csrf_token %}
+                {% for form in form_obj %}
+                    <div class="form-group">
+                        <label for="">{{ form.label }}</label>{{ form }}
+                        <span style="color: #761c19">{{ form.errors.0 }}</span>
+                    </div>
+                {% endfor %}
+            <div class="form-group">
+                <label for="myfile">
+                    <p>
+                        <img src="{% static 'image/yue.png' %}" id="myimg" width="200px" alt="">
+                    </p>
+                </label>
+                <input type="file" id="myfile" style="display: none">
+            </div>
+                <input type="button" id="commit" value="注册" class="btn btn-primary pull-right">
+            </form>
+        </div>
+    </div>
+</div>
+</body>
+<script>
+    $('#myfile').change(function () {
+        //1.获取file框上传的文件对象
+        let file=$('#myfile')[0].files[0]
+        //2.生成文件阅读器
+        let myFileReader=new FileReader()
+        //3.读取文件对象
+        myFileReader.readAsDataURL(file)
+        //4.将读取出来的结果修改为图片标签src属性的值
+        //等读取出来的结果完毕之后再修改
+        myFileReader.onload=function(){
+            $('#myimg').attr('src',myFileReader.result)}
+
+    })
+
+    $('#commit').click(function () {
+        //发送ajax请求，应为即包含普通键值对又包含文件，利用formate对偶像
+        //$.each(可迭代对象，回调函数(循环索引，缩放到的对象))：循环遍历可迭代对象交给回调函数去执行
+        //$('#myform').serializerArray():获取from表单中所有普通input框的name和values属性
+    let formDataObj=new FormData()
+        $.each($('#myform').serializeArray(),function (index,obj) {
+            formDataObj.append(obj.name,obj.value)
+        })
+        //2.添加文件
+        formDataObj.append('avatar',$('#myfile')[0].files[0])
+        //3.发送ajax请求
+        $.ajax({
+            url:'',
+            type:'post',
+            data:formDataObj,
+            contentType:false,
+            processData:false,
+            success:function (args) {
+                if(args.code===0){
+                    window.location.href=args.url
+                }else{
+                    $.each(args.msg,function (index,obj) {
+                        //index:字段的键 obj:值（报错信息）
+                        let target_id='#id_'+index//#id_username
+                        $(target_id).next().text(obj[0]).parent().addClass('has-error')
+                    })
+                }
+            }
+        })
+    })
+
+    $('input').focus(function () {
+        //将报错的span标签文本清空以及报错的div样式删除
+        $(this).next().text('').parent().removeClass('has-error')
+    })
+</script>
+</html>

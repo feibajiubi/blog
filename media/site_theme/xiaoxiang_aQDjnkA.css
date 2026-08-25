@@ -1,0 +1,12 @@
+a{
+    color: dodgerblue;
+}
+
+body{
+    background-image: url('/static/image/xiaoxiang.jpg');
+    background-size: auto 100%;
+    background-repeat: no-repeat;
+    background-position: center top;
+    background-attachment: fixed;
+    background-color: cornflowerblue;
+}

@@ -1,0 +1,271 @@
+{% extends 'base.html' %}
+{% block title %}欢迎来到博客园{% endblock %}
+
+{% block brand_text %}博客园{% endblock %}
+{% block brand_href %}#{% endblock %}
+{% block nav1_text %}首页{% endblock %}
+{% block nav1_href %}#{% endblock %}
+{% block nav1_class %}active{% endblock %}
+
+{% block head_extra %}
+    <style>
+        .home-filter-panel{position:relative;}
+        .filter-toggle{cursor:pointer;}
+        .filter-toggle .caret{margin-left:6px;}
+        .filter-dropdown{
+            display:none;
+            position:absolute;
+            top:100%;
+            left:0;
+            right:0;
+            background:#fff;
+            border:1px solid #ddd;
+            border-radius:4px;
+            box-shadow:0 4px 12px rgba(0,0,0,0.18);
+            z-index:1050;
+            max-height:320px;
+            overflow-y:auto;
+        }
+        .filter-dropdown.show{display:block;}
+        .filter-dropdown ul{list-style:none;margin:0;padding:6px 0;}
+        .filter-dropdown li a{
+            display:block;
+            padding:7px 16px;
+            color:#333;
+            text-decoration:none;
+            font-size:14px;
+        }
+        .filter-dropdown li a:hover{background:#f0f4ff;color:#337ab7;}
+        .filter-dropdown li.divider{height:1px;background:#eee;margin:4px 0;}
+        .filter-body-selected{display:flex;align-items:center;justify-content:space-between;}
+        .filter-body-selected .label{font-size:13px;}
+        .filter-empty{color:#999;font-size:13px;}
+        .liked-link{color:inherit;text-decoration:none;}
+        .liked-link:hover{color:inherit;text-decoration:none;}
+        /* 排行列表样式 */
+        .rank-body{padding:8px 12px;}
+        .rank-list{list-style:none;margin:0;padding:0;}
+        .rank-list li{
+            display:flex;
+            align-items:center;
+            padding:5px 0;
+            border-bottom:1px dashed #eee;
+            font-size:13px;
+            line-height:1.4;
+        }
+        .rank-list li:last-child{border-bottom:none;}
+        .rank-list li a{
+            color:#333;
+            text-decoration:none;
+            overflow:hidden;
+            text-overflow:ellipsis;
+            white-space:nowrap;
+            flex:1;
+        }
+        .rank-list li a:hover{color:#337ab7;text-decoration:underline;}
+        .rank-num{
+            display:inline-block;
+            width:20px;
+            height:20px;
+            line-height:20px;
+            text-align:center;
+            border-radius:3px;
+            font-size:12px;
+            font-weight:bold;
+            margin-right:8px;
+            flex-shrink:0;
+            background:#bbb;
+            color:#fff;
+        }
+        .rank-1{background:#e74c3c;}
+        .rank-2{background:#e67e22;}
+        .rank-3{background:#f1c40f;}
+        .rank-author{background:#5cb85c;}
+        .rank-empty{color:#999;font-size:13px;padding:5px 0;}
+    </style>
+{% endblock %}
+
+{% block content %}
+<!-- 首页展示 -->
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-2">
+            <!-- 分类筛选板块 -->
+            <div class="panel panel-default home-filter-panel">
+                <div class="panel-heading filter-toggle" data-target="categoryDropdown">
+                    <h3 class="panel-title">分类<span class="glyphicon glyphicon-th-list"></span><span class=" caret "></span></h3>
+                </div>
+                <div class="filter-dropdown" id="categoryDropdown">
+                    <ul>
+                        <li><a href="/home/">全部分类</a></li>
+                        <li class="divider"></li>
+                        {% for cat in all_categories %}
+                            <li><a href="/home/?category={{ cat.name|urlencode }}">{{ cat.name }}</a></li>
+                        {% empty %}
+                            <li><a href="#">暂无分类</a></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="panel-body">
+                    {% if current_category %}
+                        <div class="filter-body-selected">
+                            <span class="label label-info">{{ current_category }}</span>
+                            <a href="/home/" class="btn btn-xs btn-default">清除</a>
+                        </div>
+                    {% else %}
+                        <span class="filter-empty">点击上方选择分类</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 标签筛选板块 -->
+            <div class="panel panel-warning home-filter-panel">
+                <div class="panel-heading filter-toggle" data-target="tagDropdown">
+                    <h3 class="panel-title">标签<span class="glyphicon glyphicon-tag"></span><span class="caret"></span></h3>
+                </div>
+                <div class="filter-dropdown" id="tagDropdown">
+                    <ul>
+                        <li><a href="/home/">全部标签</a></li>
+                        <li class="divider"></li>
+                        {% for tag in all_tags %}
+                            <li><a href="/home/?tag={{ tag.name|urlencode }}">{{ tag.name }}</a></li>
+                        {% empty %}
+                            <li><a href="#">暂无标签</a></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="panel-body">
+                    {% if current_tag %}
+                        <div class="filter-body-selected">
+                            <span class="label label-warning">{{ current_tag }}</span>
+                            <a href="/home/" class="btn btn-xs btn-default">清除</a>
+                        </div>
+                    {% else %}
+                        <span class="filter-empty">点击上方选择标签</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 赞过筛选板块 -->
+            <div class="panel panel-success">
+                <div class="panel-heading">
+                    <h3 class="panel-title">
+                        <a href="/home/?liked=1" class="liked-link">赞过<span class="glyphicon glyphicon-heart"></span> </a>
+                    </h3>
+                </div>
+                <div class="panel-body">
+                    {% if current_liked == '1' %}
+                        <div class="filter-body-selected">
+                            <span class="label label-success">已点赞文章</span>
+                            <a href="/home/" class="btn btn-xs btn-default">清除</a>
+                        </div>
+                    {% else %}
+                        <span class="filter-empty">点击查看我赞过的</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-8">
+            {% for article_obj in article_queryset %}
+                <div class="media">
+                <h4 class="media-heading"><a href="/{{ article_obj.blog.userinfo.username }}/article/{{ article_obj.id }}">{{ article_obj.title }}</a></h4>
+                    <div class="media-left">
+                        <a href="/{{ article_obj.blog.userinfo.username }}/">
+                            <img class="media-object" src="/media/{{ article_obj.blog.userinfo.avatar }}" width="50px" height="50px" alt="...">
+                        </a>
+                    </div>
+                    <div class="media-body">
+                        {{ article_obj.desc }}
+                    </div>
+                </div>
+                <div>
+                <span><a href="/{{ article_obj.blog.userinfo.username }}/">{{ article_obj.blog.site_title }}</a></span>&nbsp;&nbsp;
+                <span>{{ article_obj.create_time|date:'Y-m-d' }}</span>&nbsp;&nbsp;
+                <span>&nbsp;<span class="glyphicon glyphicon-comment"></span>{{ article_obj.comment_num }}</span>&nbsp;&nbsp;
+                <span>&nbsp;<span class="glyphicon glyphicon-thumbs-up"></span>{{ article_obj.up_num }}</span>&nbsp;&nbsp;
+                <span>&nbsp;<span class="glyphicon glyphicon-eye-open"></span>{{ article_obj.read_num }}</span>&nbsp;&nbsp;
+                </div>
+            {% endfor %}
+        </div>
+        <div class="col-md-2">
+            <!-- 阅读排行 -->
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">阅读排行<span class="glyphicon glyphicon-signal"></span></h3>
+                </div>
+                <div class="panel-body rank-body">
+                    <ul class="rank-list">
+                        {% for article in read_rank %}
+                            <li>
+                                <span class="rank-num rank-{{ forloop.counter }}">{{ forloop.counter }}</span>
+                                <a href="/{{ article.blog.userinfo.username }}/article/{{ article.id }}" title="{{ article.title }}">{{ article.title }}</a>
+                            </li>
+                        {% empty %}
+                            <li class="rank-empty">暂无文章</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            <!-- 点赞排行 -->
+            <div class="panel panel-danger">
+                <div class="panel-heading">
+                    <h3 class="panel-title">点赞排行<span class="glyphicon glyphicon-signal"></span></h3>
+                </div>
+                <div class="panel-body rank-body">
+                    <ul class="rank-list">
+                        {% for article in up_rank %}
+                            <li>
+                                <span class="rank-num rank-{{ forloop.counter }}">{{ forloop.counter }}</span>
+                                <a href="/{{ article.blog.userinfo.username }}/article/{{ article.id }}" title="{{ article.title }}">{{ article.title }}</a>
+                            </li>
+                        {% empty %}
+                            <li class="rank-empty">暂无文章</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            <!-- 作者推荐 -->
+            <div class="panel panel-success">
+                <div class="panel-heading">
+                    <h3 class="panel-title">作者推荐<span class="glyphicon glyphicon-pencil"></span></h3>
+                </div>
+                <div class="panel-body rank-body">
+                    <ul class="rank-list">
+                        {% for blog in blog_list %}
+                            <li>
+                                <span class="rank-num rank-author">A</span>
+                                <a href="/{{ blog.userinfo.username }}/" title="{{ blog.site_name }}">{{ blog.site_title }}</a>
+                            </li>
+                        {% empty %}
+                            <li class="rank-empty">暂无博主</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+    // 分类/标签筛选悬浮框
+    $('.filter-toggle').click(function(e){
+        e.stopPropagation();
+        var targetId=$(this).data('target');
+        var $dropdown=$('#'+targetId);
+        // 切换当前悬浮框
+        $dropdown.toggleClass('show');
+        // 关闭其他悬浮框
+        $('.filter-dropdown').not($dropdown).removeClass('show');
+    });
+    // 点击悬浮框内部不关闭
+    $('.filter-dropdown').click(function(e){
+        e.stopPropagation();
+    });
+    // 点击页面其他地方关闭所有悬浮框
+    $(document).click(function(){
+        $('.filter-dropdown').removeClass('show');
+    });
+</script>
+{% endblock %}

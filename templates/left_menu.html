@@ -1,0 +1,118 @@
+<div class="panel panel-default">
+    <div class="panel-heading">日期档案</div>
+    <div class="panel-body calendar-box">
+        <div class="calendar-head">
+            <a id="prevMonth">&lt;</a>
+            <span id="ymText"></span>
+            <a id="nextMonth">&gt;</a>
+        </div>
+        <table class="calendar-table">
+            <tr>
+                <th>日</th>
+                <th>一</th>
+                <th>二</th>
+                <th>三</th>
+                <th>四</th>
+                <th>五</th>
+                <th>六</th>
+            </tr>
+            <tbody id="calendarBody"></tbody>
+        </table>
+    </div>
+</div>
+<div class="panel panel-default">
+    <div class="panel-heading">
+        <h3 class="panel-title">文章分类</h3>
+    </div>
+    <div class="panel-body">
+        {% for name,count in category_list %}
+            <p><a href="/{{ username }}/category/{{ name }}/">{{ name }}({{ count }})</a></p>
+        {% endfor %}
+    </div>
+</div>
+<div class="panel panel-default">
+    <div class="panel-heading">
+        <h3 class="panel-title">文章标签</h3>
+    </div>
+    <div class="panel-body">
+        {% for name,count in tag_list %}
+            <p><a href="/{{ username }}/tag/{{ name }}/">{{ name }}({{ count }})</a></p>
+        {% endfor %}
+
+    </div>
+</div>
+
+<script>
+// 后端传过来的数据
+const username = "{{ username }}";
+const hasArticleDate = {{ has_date_str | safe }};
+let currentYear = {{ init_year }};
+let currentMonth = {{ init_month }};
+
+// 渲染日历函数
+function renderCalendar(y, m){
+    document.getElementById("ymText").innerText = `${y}年${m}月`;
+    const body = document.getElementById("calendarBody");
+    body.innerHTML = "";
+
+    // 获取当月第一天是星期几、当月总天数
+    const firstDay = new Date(y, m-1, 1).getDay();
+    const daysCount = new Date(y, m, 0).getDate();
+
+    let row = document.createElement("tr");
+    // 填充前面空白格子
+    for(let i=0;i<firstDay;i++){
+        let td = document.createElement("td");
+        td.className = "day-gray";
+        row.appendChild(td);
+    }
+
+    // 填充日期
+    for(let d=1;d<=daysCount;d++){
+        let dateStr = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        let td = document.createElement("td");
+        td.innerText = d;
+
+        if(hasArticleDate.includes(dateStr)){
+            td.className = "day-link";
+            // 点击跳转归档页面
+            td.onclick = ()=>{
+                location.href = `/${username}/archive/${dateStr}/`;
+            }
+        }else{
+            td.className = "day-gray";
+        }
+        row.appendChild(td);
+
+        // 每周7个换行
+        if((firstDay + d) % 7 === 0){
+            body.appendChild(row);
+            row = document.createElement("tr");
+        }
+    }
+    body.appendChild(row);
+}
+
+// 切换月份事件
+document.getElementById("prevMonth").onclick = function(){
+    if(currentMonth === 1){
+        currentYear--;
+        currentMonth = 12;
+    }else{
+        currentMonth--;
+    }
+    renderCalendar(currentYear, currentMonth);
+}
+document.getElementById("nextMonth").onclick = function(){
+    if(currentMonth === 12){
+        currentYear++;
+        currentMonth = 1;
+    }else{
+        currentMonth++;
+    }
+    renderCalendar(currentYear, currentMonth);
+}
+
+// 初始渲染
+renderCalendar(currentYear, currentMonth);
+</script>

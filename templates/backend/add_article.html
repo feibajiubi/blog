@@ -1,0 +1,29 @@
+{% extends 'backend/backend.html' %}
+{% block page_content %}
+    <form action="" method="post">
+    {% csrf_token %}
+    <h3>添加文章</h3>
+    <p>标题</p>
+    <div>
+        <input type="text" name="title" class="form-control">
+    </div>
+    <p>内容</p>
+    <div>
+        <textarea name="content" id="content" cols="30" rows="10"></textarea>
+    </div>
+    <p>分类</p>
+    <div>
+        {% for category_obj in category_queryset %}
+            <input type="radio" name="category" value="{{ category_obj.id }}">{{ category_obj.name }}
+        {% endfor %}
+    </div>
+    <p>标签</p>
+    <div>
+        {% for tag_obj in tag_queryset %}
+            <input type="checkbox" name="tags" value="{{ tag_obj.id }}">{{ tag_obj.name }}
+        {% endfor %}
+    </div>
+    <br>
+    <input type="submit" value="添加" class="btn btn-primary">
+    </form>
+{% endblock %}

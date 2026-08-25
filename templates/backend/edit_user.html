@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% block title %}个人信息{% endblock %}
+
+{% block brand_text %}首页{% endblock %}
+{% block brand_href %}/home/{% endblock %}
+{% block nav1_text %}{{ blog.site_name|default:"NONE" }}{% endblock %}
+{% block nav1_href %}#{% endblock %}
+{% block nav1_class %}active{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-8 col-md-offset-2">
+            <h3 class="text-center">个人信息</h3>
+
+            <!-- 修改头像 -->
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">修改头像</h3>
+                </div>
+                <div class="panel-body">
+                    <form id="avatarForm" action="" method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                        <p class="text-center">
+                            <label for="myfile">
+                                <img src="/media/{{ user_obj.avatar }}" alt="" width="200px" id="myimg" style="cursor:pointer;border-radius:50%;">
+                            </label>
+                        </p>
+                        <input type="file" id="myfile" name="avatar" style="display:none">
+                        <p class="text-center"><input type="submit" value="上传头像" class="btn btn-primary"></p>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 修改个人信息 -->
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">修改个人信息</h3>
+                </div>
+                <div class="panel-body">
+                    <form id="form">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <label for="username">用户名</label>
+                            <input type="text" id="username" name="username" value="{{ request.user.username }}" disabled class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="phone">手机号</label>
+                            <input type="text" id="phone" name="phone" value="{{ request.user.phone }}" class="form-control">
+                            <span style="color:#ff0000;" id="phone_error"></span>
+                        </div>
+                        <div class="form-group">
+                            <label for="email">邮箱</label>
+                            <input type="text" id="email" name="email" value="{{ request.user.email }}" class="form-control">
+                            <span style="color:red;" id="email_error"></span>
+                        </div>
+                        <div class="form-group">
+                            <label for="site_name">站点名字</label>
+                            <input type="text" id="site_name" name="site_name" value="{{ blog.site_name }}" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="site_title">站点标题</label>
+                            <input type="text" id="site_title" name="site_title" value="{{ blog.site_title }}" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="site_theme">站点样式</label>
+                            <input type="file" id="site_theme" name="site_theme" class="form-control">
+                            {% if blog.site_theme %}
+                                <p class="help-block">当前主题：<a href="/media/{{ blog.site_theme }}" target="_blank">{{ blog.site_theme.name }}</a></p>
+                            {% else %}
+                                <p class="help-block">当前主题：默认（未上传）</p>
+                            {% endif %}
+                        </div>
+                        <button type="button" id="edit_msg" class="btn btn-primary">保存修改</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block js %}
+    <script>
+    // 头像预览
+    $('#myfile').change(function () {
+        let file_obj=$(this)[0].files[0]
+        let myFileReaderObj=new FileReader()
+        myFileReaderObj.readAsDataURL(file_obj)
+        myFileReaderObj.onload=function () {
+            $('#myimg').attr('src',myFileReaderObj.result)
+        }
+    })
+
+    // 上传头像前检查是否选择了图片
+    $('#avatarForm').submit(function () {
+        if (!$('#myfile')[0].files.length) {
+            alert('请先选择一张图片再上传')
+            return false
+        }
+    })
+
+    // 修改个人信息
+    $('#edit_msg').click(function () {
+        let formDataObj=new FormData()
+        formDataObj.append('csrfmiddlewaretoken',$('input[name="csrfmiddlewaretoken"]').val())
+        formDataObj.append('phone',$('#phone').val())
+        formDataObj.append('email',$('#email').val())
+        formDataObj.append('site_name',$('#site_name').val())
+        formDataObj.append('site_title',$('#site_title').val())
+        formDataObj.append('site_theme',$('#site_theme')[0].files[0])
+        $.ajax({
+            url:'/edit_user/',
+            type:'post',
+            data:formDataObj,
+            contentType:false,
+            processData:false,
+            success:function (args) {
+                if (args.code===0){
+                    window.location.reload()
+                }else{
+                    $('#phone_error').text(args.phone)
+                    $('#email_error').text(args.email)
+                }
+            }
+        })
+    })
+    </script>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends 'backend/backend.html' %}
+{% block page_content %}
+    <h3>编辑文章</h3>
+    <form action="" method="post">
+    {% csrf_token %}
+        <p>标题</p>
+        <div>
+            <input type="text" name="title" class="form-control" value="{{ article_obj.title }}">
+        </div>
+        <p>内容</p>
+        <div>
+        <textarea name="content" id="content" cols="30" rows="10">
+            {{ article_obj.content }}
+        </textarea>
+        </div>
+        <br>
+        <p>分类</p>
+        <div>
+            {% for category_obj in category_queryset %}
+                {% if category_obj == article_obj.category %}
+                    <input type="radio" name="category" checked value="{{ category_obj.pk }}">{{ category_obj.name }}
+                {% else %}
+                    <input type="radio" name="category" value="{{ category_obj.pk }}">{{ category_obj.name }}
+                {% endif %}
+            {% endfor %}
+        </div>
+        <br>
+        <p>标签</p>
+        <div>
+            {% for tag_obj in tag_queryset %}
+                {% if tag_obj in article_obj.tags.all %}
+                    <input type="checkbox" name="tags" checked value="{{ tag_obj.id }}">{{ tag_obj.name }}
+                {% else %}
+                    <input type="checkbox" name="tags" value="{{ tag_obj.id }}">{{ tag_obj.name }}
+                {% endif %}
+            {% endfor %}
+        </div>
+        <br>
+        <input type="submit" value="修改" class="btn btn-primary">
+    </form>
+{% endblock %}

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'bootstrap-3.4.1-dist\css\bootstrap.min.css' %}">
+    <script src="{% static 'js\jquery-3.7.1.min.js' %}"></script>
+    <script src="{% static 'bootstrap-3.4.1-dist\js\bootstrap.min.js' %}"></script>
+    <style>
+        .error-box{margin-top:18vh;}
+        .error-box p{font-size:16px;margin:10px 0;}
+    </style>
+</head>
+<body>
+    <div class="container-fluid error-box">
+        <div class="col-md-6 col-md-offset-4">
+            <p><a href="//www.cnblogs.com"><img src="//assets.cnblogs.com/logo.svg" class="logo" alt=""></a></p>
+            <p>
+                404 - 您访问的页面不存在
+            </p>
+            <p>
+                可能是网址有误，或者对应的内容已被删除，或者处于私有状态
+            </p>
+            <p>
+                访问<a href="/home/">更多</a>
+            </p>
+            <p>
+                邮件联系：3186864708@qq.com
+            </p>
+        </div>
+
+    </div>
+</body>
+</html>

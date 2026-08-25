@@ -1,0 +1,264 @@
+{% extends 'base.html' %}
+{% block title %}后台管理{% endblock %}
+
+{% block brand_text %}首页{% endblock %}
+{% block brand_href %}/home/{% endblock %}
+{% block nav1_text %}{{ blog.site_name|default:"NONE" }}{% endblock %}
+{% block nav1_href %}#{% endblock %}
+{% block nav1_class %}active{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-2">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">更多操作</h3>
+                </div>
+                <div class="panel-body">
+                    <ul class="list-group">
+                        <li class="list-group-item"><a href="/backend/">返回后台</a></li>
+                        <li class="list-group-item"><a href="/add_article/">添加文章</a></li>
+                        <li class="list-group-item"><a href="/add_category/">添加分类</a></li>
+                        <li class="list-group-item"><a href="/add_tag/">添加标签</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-10">
+            {% block page_content %}
+                <div>
+
+                <!-- Nav tabs -->
+                <ul class="nav nav-tabs" role="tablist">
+                    <li role="presentation" class="active"><a href="#article" aria-controls="article" role="tab"
+                                                              data-toggle="tab">文章管理</a></li>
+                    <li role="presentation"><a href="#category" aria-controls="category" role="tab" data-toggle="tab">分类管理</a>
+                    </li>
+                    <li role="presentation"><a href="#tag" aria-controls="tag" role="tab" data-toggle="tab">标签管理</a></li>
+                    <li role="presentation"><a href="#comment" aria-controls="comment" role="tab" data-toggle="tab">评论管理</a>
+                    </li>
+                </ul>
+
+                <!-- Tab panes -->
+                <div class="tab-content">
+                    <div role="tabpanel" class="tab-pane active" id="article">
+                        <table class="table-striped table">
+                            <thead>
+                                <tr>
+                                    <th>标题</th>
+                                    <th>发布时间</th>
+                                    <th>评论数</th>
+                                    <th>点赞数</th>
+                                    <th>操作</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            {% for article_obj in article_queryset %}
+                                <tr>
+                                    <td>
+                                        <a href="/{{ request.user.username }}/article/{{ article_obj.pk }}">{{ article_obj.title }}</a>
+                                    </td>
+                                    <td>{{ article_obj.create_time|date:'Y-m-d' }}</td>
+                                    <td>{{ article_obj.comment_num }}</td>
+                                    <td>{{ article_obj.up_num }}</td>
+                                    <td><a href="/edit/article/{{ article_obj.id }}" class="btn btn-primary btn-xs">编辑</a></td>
+                                    <td><a href="/delete/article/{{ article_obj.id }}" class="btn btn-danger btn-xs">删除</a></td>
+                                </tr>
+                            {% endfor %}
+
+                            </tbody>
+                        </table>
+                    </div>
+                    <div role="tabpanel" class="tab-pane" id="category">
+                        <table class="table-striped table">
+                            <thead>
+                                <tr>
+                                    <th>分类名</th>
+                                    <th>操作</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            {% for category_obj in category_queryset %}
+                                <tr>
+                                    <td class="category-name" style="width:200px;">{{ category_obj.name }}</td>
+                                    <td style="width:80px;"><a href="javascript:void(0)" class="btn btn-primary btn-xs edit-category" data-id="{{ category_obj.id }}">编辑</a></td>
+                                    <td style="width:80px;"><a href="/delete/category/{{ category_obj.id }}" class="btn btn-danger btn-xs">删除</a></td>
+                                </tr>
+                            {% endfor %}
+
+                            </tbody>
+                        </table>
+                    </div>
+                    <div role="tabpanel" class="tab-pane" id="tag">
+                        <table class="table-striped table">
+                            <thead>
+                                <tr>
+                                    <th>标签名</th>
+                                    <th>操作</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            {% for tag_obj in tag_queryset %}
+                                <tr>
+                                    <td class="tag-name" style="width:200px;">{{ tag_obj.name }}</td>
+                                    <td style="width:80px;"><a href="javascript:void(0)" class="btn btn-primary btn-xs edit-tag" data-id="{{ tag_obj.id }}">编辑</a></td>
+                                    <td style="width:80px;"><a href="/delete/tag/{{ tag_obj.id }}" class="btn btn-danger btn-xs">删除</a></td>
+                                </tr>
+                            {% endfor %}
+
+                            </tbody>
+                        </table>
+                    </div>
+                    <div role="tabpanel" class="tab-pane" id="comment">
+                        <table class="table-striped table">
+                            <thead>
+                                <tr>
+                                    <th>评论</th>
+                                    <th>文章标题</th>
+                                    <th>时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            {% for comment_obj in comment_queryset %}
+                                <tr>
+                                    <td>{{ comment_obj.content }}</td>
+                                    <td>
+                                        <a href="/{{ comment_obj.article.blog.userinfo.username }}/article/{{ comment_obj.article.pk }}">{{comment_obj.article.title }}</a>
+                                    </td>
+                                    <td>{{ comment_obj.create_time|date:'Y-m-d h:i:s' }}</td>
+                                    <td><a href="/delete/comment/{{ comment_obj.id }}" class="btn btn-danger btn-xs">删除</a></td>
+                                </tr>
+                            {% endfor %}
+
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+            {% endblock %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block js %}
+    <script>
+    // 全局配置CSRF token（从cookie读取）
+    function getCookie(name){
+        let cookieValue = null;
+        if(document.cookie && document.cookie !== ''){
+            let cookies = document.cookie.split(';');
+            for(let i=0;i<cookies.length;i++){
+                let cookie = cookies[i].trim();
+                if(cookie.substring(0, name.length+1) === (name+'=')){
+                    cookieValue = decodeURIComponent(cookie.substring(name.length+1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    let csrftoken = getCookie('csrftoken');
+    $.ajaxSetup({
+        beforeSend: function(xhr, settings){
+            if(!/^(GET|HEAD|OPTIONS|TRACE)$/.test(settings.type)){
+                xhr.setRequestHeader("X-CSRFToken", csrftoken);
+            }
+        }
+    });
+
+    // 页面加载时根据url的hash激活对应的tab
+    $(function(){
+        var hash = window.location.hash;
+        if(hash){
+            $('.nav-tabs a[href="'+hash+'"]').tab('show');
+        }
+    })
+
+    // 编辑分类 - 行内编辑
+    $(document).on('click', '.edit-category', function(e){
+        e.preventDefault();
+        let $btn = $(this);
+        let $td = $btn.closest('tr').find('.category-name');
+        let oldName = $td.text().trim();
+        $td.html('<input type="text" class="form-control category-input" value="'+oldName+'" style="width:100%;">');
+        $btn.text('完成').removeClass('edit-category').addClass('save-category');
+        $td.find('input').focus();
+    });
+
+    // 保存分类
+    $(document).on('click', '.save-category', function(e){
+        e.preventDefault();
+        let $btn = $(this);
+        let id = $btn.data('id');
+        let $td = $btn.closest('tr').find('.category-name');
+        let newName = $td.find('input').val().trim();
+        if(!newName){
+            alert('分类名不能为空');
+            return;
+        }
+        $.ajax({
+            url: '/edit/category/' + id + '/',
+            type: 'post',
+            data: {'name': newName},
+            success: function(args){
+                if(args.code === 0){
+                    $td.text(newName);
+                    $btn.text('编辑').removeClass('save-category').addClass('edit-category');
+                }else{
+                    alert(args.msg || '修改失败');
+                }
+            },
+            error: function(){
+                alert('请求失败，请刷新页面重试');
+            }
+        });
+    });
+
+    // 编辑标签 - 行内编辑
+    $(document).on('click', '.edit-tag', function(e){
+        e.preventDefault();
+        let $btn = $(this);
+        let $td = $btn.closest('tr').find('.tag-name');
+        let oldName = $td.text().trim();
+        $td.html('<input type="text" class="form-control tag-input" value="'+oldName+'" style="width:100%;">');
+        $btn.text('完成').removeClass('edit-tag').addClass('save-tag');
+        $td.find('input').focus();
+    });
+
+    // 保存标签
+    $(document).on('click', '.save-tag', function(e){
+        e.preventDefault();
+        let $btn = $(this);
+        let id = $btn.data('id');
+        let $td = $btn.closest('tr').find('.tag-name');
+        let newName = $td.find('input').val().trim();
+        if(!newName){
+            alert('标签名不能为空');
+            return;
+        }
+        $.ajax({
+            url: '/edit/tag/' + id + '/',
+            type: 'post',
+            data: {'name': newName},
+            success: function(args){
+                if(args.code === 0){
+                    $td.text(newName);
+                    $btn.text('编辑').removeClass('save-tag').addClass('edit-tag');
+                }else{
+                    alert(args.msg || '修改失败');
+                }
+            },
+            error: function(){
+                alert('请求失败，请刷新页面重试');
+            }
+        });
+    });
+    </script>
+{% endblock %}
