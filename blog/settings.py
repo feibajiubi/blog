@@ -24,11 +24,10 @@ load_dotenv(BASE_DIR / '.env')
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# 从环境变量/.env 读取；未配置时使用不安全的后备值（仅限本地开发）
-SECRET_KEY = os.environ.get(
-    'DJANGO_SECRET_KEY',
-    '***REMOVED-SECRET-KEY***'
-)
+# 必须从环境变量/.env 读取；缺失时抛出异常，避免使用不安全后备值
+if not os.environ.get('DJANGO_SECRET_KEY'):
+    raise RuntimeError('缺少 DJANGO_SECRET_KEY：请在 .env 或环境变量中配置')
+SECRET_KEY = os.environ['DJANGO_SECRET_KEY']
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in ('1', 'true', 'yes')
@@ -88,7 +87,8 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': os.environ.get('DB_NAME', 'blog'),
         'USER': os.environ.get('DB_USER', 'root'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', '***REMOVED-DB-PASSWORD***'),
+        # 密码必须来自环境变量/.env，不提供明文后备值
+        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
         'HOST': os.environ.get('DB_HOST', 'localhost'),
         'PORT': os.environ.get('DB_PORT', '3306'),
         'OPTIONS': {
