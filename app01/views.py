@@ -1,13 +1,18 @@
 import json
 import random
 import re
+import time
 
+import jieba
+import requests
 from django.contrib import auth
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count, F
+from django.db.models import Count, F, Sum
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, redirect
+from django.views.decorators.csrf import csrf_exempt
 
+from blog import settings
 from app01 import models
 from app01.models import Article
 from app01.myform import regform
@@ -28,9 +33,6 @@ def register(request):
             clean_data=form_obj.cleaned_data
             #将confirm_password去除
             clean_data.pop('confirm_password')
-            file_obj=request.FILES.get('avatar')
-            if file_obj:
-                clean_data['avatar']:file_obj
             #操作数据库保存数据
             #**clean_data:以关键字参数给函数传参
             models.UserInfo.objects.create_user(**clean_data)
@@ -212,6 +214,16 @@ def site(request,username,**kwargs):
     now = date.today()
     init_year = now.year
     init_month = now.month
+
+    # 该站点全部文章的汇总统计（不受当前筛选条件影响）
+    from django.db.models import Sum as _Sum
+    blog_stats = models.Article.objects.filter(blog=blog).aggregate(
+        total=Count('id'),
+        read=_Sum('read_num') or 0,
+        up=_Sum('up_num') or 0,
+        down=_Sum('down_num') or 0,
+        comment=_Sum('comment_num') or 0,
+    )
 
     return render(request,'site.html',locals())
 
@@ -506,3 +518,315 @@ def edit_user(request):
                     blog_obj.save()
             return JsonResponse(back_dict)
     return render(request,'backend/edit_user.html',locals())
+
+
+# ==================== 鲸鱼娘宠物助手 ====================
+
+@csrf_exempt
+def pet_stats(request):
+    """宠物助手统计接口：
+    默认返回博客全站数据；带 ?blog=<用户名> 返回该站点汇总；
+    带 ?article=<文章id> 返回当前文章数据（优先）
+    """
+    from django.db.models import Sum
+    article_id = request.GET.get('article', '').strip()
+    article_stats = None
+    if article_id and article_id.isdigit():
+        a = models.Article.objects.filter(id=int(article_id)).select_related('blog__userinfo').first()
+        if a:
+            article_stats = {
+                'article_id': a.id,
+                'title': a.title,
+                'author': a.blog.userinfo.username if a.blog and a.blog.userinfo else '',
+                'up': a.up_num,
+                'down': a.down_num,
+                'read': a.read_num,
+                'comment': a.comment_num,
+            }
+    blog_name = request.GET.get('blog', '').strip()
+    blog_stats = None
+    if blog_name:
+        # 查找该用户名对应的站点
+        user_obj = models.UserInfo.objects.filter(username=blog_name).select_related('blog').first()
+        if user_obj and user_obj.blog:
+            blog = user_obj.blog
+            agg = models.Article.objects.filter(blog=blog).aggregate(
+                total=Count('id'),
+                read=Sum('read_num') or 0,
+                up=Sum('up_num') or 0,
+                down=Sum('down_num') or 0,
+                comment=Sum('comment_num') or 0,
+            )
+            blog_stats = {
+                'blog': blog_name,
+                'site_title': blog.site_title,
+                'stats': agg,
+            }
+    # 全站统计
+    agg_all = models.Article.objects.aggregate(
+        total=Count('id'),
+        read=Sum('read_num') or 0,
+        up=Sum('up_num') or 0,
+        down=Sum('down_num') or 0,
+        comment=Sum('comment_num') or 0,
+    )
+    return JsonResponse({
+        'ok': True,
+        'logged_in': request.user.is_authenticated,
+        'username': request.user.username if request.user.is_authenticated else '',
+        'blog_count': models.Blog.objects.count(),
+        'category_count': models.Category.objects.count(),
+        'tag_count': models.Tag.objects.count(),
+        'stats': agg_all,
+        'blog_stats': blog_stats,       # 命中站点时非空
+        'article_stats': article_stats, # 命中文章时非空
+    })
+
+
+# RAG 知识库：分词检索相关文章
+_STOP_WORDS = set('的了和是在有这我你他她它们什么怎么为什么吗呢吧啊呀哦嗯啊哈的么一个可以能不能请问告诉').union(
+    {'的', '了', '和', '是', '在', '有', '这', '我', '你', '他', '她', '它', '们', '什么', '怎么', '为什么',
+     '吗', '呢', '吧', '啊', '呀', '哦', '嗯', '哈', '个', '可以', '能', '不能', '请问', '告诉', '一下', '一些'})
+
+
+def _rag_search(query, top_n=3):
+    """用 jieba 分词 + 关键词匹配检索文章，返回 [{title,url,desc,score}]"""
+    words = [w for w in jieba.cut(query) if len(w) > 1 and w not in _STOP_WORDS]
+    if not words:
+        # 全部是停用词时退化为空检索
+        return []
+    articles = models.Article.objects.select_related('blog__userinfo').all()
+    scored = []
+    for a in articles:
+        score = 0
+        title_hit = [w for w in words if w in a.title]
+        content_hit = [w for w in words if w in a.content]
+        score += len(title_hit) * 3 + len(content_hit)
+        if score > 0:
+            scored.append((score, a, title_hit, content_hit))
+    scored.sort(key=lambda x: -x[0])
+    results = []
+    for score, a, th, ch in scored[:top_n]:
+        # 生成摘要：优先显示命中词附近的内容
+        snippet = a.desc
+        if ch:
+            idx = a.content.find(ch[0])
+            if idx >= 0:
+                start = max(0, idx - 40)
+                snippet = a.content[start:idx + 60].replace('\n', ' ')
+        results.append({
+            'title': a.title,
+            'url': f'/{a.blog.userinfo.username}/article/{a.id}',
+            'desc': a.desc,
+            'snippet': snippet,
+            'score': score,
+        })
+    return results
+
+
+# 规则对话库
+_RULE_REPLIES = [
+    (['你好', '您好', '嗨', '哈喽', 'hello', 'hi', '在吗', '在么'],
+     ['你好呀~ 我是博客里的小鲸鱼娘 🐋', '嗨嗨！找我有事吗？', '在的在的，一直在这里等你呢~']),
+    (['你是谁', '你叫什么', '自我介绍', '介绍你'],
+     ['我是小鲸鱼娘，这个博客的 AI 宠物助手 🐋 可以陪你聊天、帮你找文章、播报博客数据哦！']),
+    (['能做什么', '会什么', '有什么功能', '帮助', 'help', '功能'],
+     ['我可以：\n① 陪你聊天，回答关于这个博客的问题\n② 帮你检索站内文章（知识库问答）\n③ 播报博客数据（点我看统计）\n④ 让你摸摸头~']),
+    (['谢谢', '感谢', '多谢', 'thx', 'thanks'],
+     ['不客气呀~ 能帮到你就好！(๑•̀ㅂ•́)و✧', '嘿嘿，小事一桩！']),
+    (['再见', '拜拜', '走了', '886', 'bye'],
+     ['拜拜~ 随时回来找我玩哦 🐋', '再见再见，我会想你的~']),
+    (['笨蛋', '傻瓜', '菜', '垃圾', '没用'],
+     ['呜……不许这么说我！(｡•́︿•̀｡)', '哼！我可聪明了！会检索文章的！']),
+    (['可爱', '好看', '漂亮', '萌萌'],
+     ['嘿嘿，谢谢夸奖，我可是专门设计的鲸鱼娘呢 (✿◡‿◡)', '嘻嘻，再多夸我几句！']),
+    (['文章', '博客', '推荐', '有什么写的', '看了什么'],
+     ['我帮你找找站内文章吧~ 可以直接问我具体内容，比如"关于 Django 的文章"']),
+]
+
+
+def _rule_reply(msg):
+    """规则对话：命中返回回复文本，否则返回 None。
+    知识性提问（是什么/怎么/为什么/解释/介绍/如何 等）不命中规则，
+    交给 AI 或 RAG 处理。
+    """
+    msg_lower = msg.lower()
+    # 知识性提问关键词：这些情况跳过规则，走 AI/RAG
+    knowledge_hint = ['是什么', '什么是', '有哪些', '怎么做', '如何', '怎么用', '为什么',
+                      '解释', '介绍', '讲讲', '说下', '说一下', '区别', '原理', '用法',
+                      'how', 'what is', 'why', '介绍下']
+    for h in knowledge_hint:
+        if h in msg_lower:
+            return None
+    for keys, replies in _RULE_REPLIES:
+        for k in keys:
+            if k in msg_lower:
+                return random.choice(replies)
+    return None
+
+
+def _deepseek_reply(system_prompt, user_msg, max_tokens=600):
+    """调用 DeepSeek API 生成回复；失败返回 None"""
+    api_key = settings.DEEPSEEK_API_KEY
+    if not api_key:
+        return None
+    try:
+        resp = requests.post(
+            'https://api.deepseek.com/chat/completions',
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json',
+            },
+            json={
+                'model': 'deepseek-chat',
+                'messages': [
+                    {'role': 'system', 'content': system_prompt},
+                    {'role': 'user', 'content': user_msg},
+                ],
+                'max_tokens': max_tokens,
+                'stream': False,
+            },
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        return data['choices'][0]['message']['content'].strip()
+    except Exception:
+        return None
+
+
+# ---------- DeepSeek 余额查询（60 秒缓存，避免频繁请求官方接口） ----------
+_balance_cache = {'ts': 0, 'data': None}
+_BALANCE_TTL = 60  # 秒
+
+def get_deepseek_balance(force=False):
+    """查询 DeepSeek 账户余额。
+    返回 dict：{ok, balance, currency, insufficient, msg}
+    - ok=True 且 insufficient=False：余额充足
+    - ok=True 且 insufficient=True：余额不足（<=0）
+    - ok=False：未配置 key / 查询失败
+    """
+    import time as _time
+    now = _time.time()
+    if not force and _balance_cache['data'] and (now - _balance_cache['ts']) < _BALANCE_TTL:
+        return _balance_cache['data']
+    api_key = settings.DEEPSEEK_API_KEY
+    if not api_key:
+        return {'ok': False, 'msg': '未配置 DEEPSEEK_API_KEY'}
+    try:
+        resp = requests.get(
+            'https://api.deepseek.com/user/balance',
+            headers={'Authorization': f'Bearer {api_key}', 'Accept': 'application/json'},
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            result = {'ok': False, 'msg': f'余额接口异常({resp.status_code})'}
+            _balance_cache.update({'ts': now, 'data': result})
+            return result
+        data = resp.json()
+        balance = 0.0
+        currency = 'CNY'
+        infos = data.get('balance_infos') or []
+        if infos:
+            try:
+                balance = float(infos[0].get('total_balance') or 0)
+            except (TypeError, ValueError):
+                balance = 0.0
+            currency = infos[0].get('currency') or 'CNY'
+        result = {
+            'ok': True,
+            'balance': round(balance, 2),
+            'currency': currency,
+            'insufficient': balance <= 0,
+        }
+        _balance_cache.update({'ts': now, 'data': result})
+        return result
+    except Exception as e:
+        return {'ok': False, 'msg': f'余额查询失败: {e}'}
+
+
+@csrf_exempt
+def pet_balance(request):
+    """宠物助手余额接口：GET 返回 DeepSeek 账户余额"""
+    return JsonResponse(get_deepseek_balance())
+
+
+@csrf_exempt
+def pet_chat(request):
+    """宠物助手对话接口：
+    1) 规则对话优先；2) RAG 检索站内文章；
+    3) 配置了 DEEPSEEK_API_KEY 时，用检索到的文章作为知识库让 AI 生成回答；
+       未配置时返回规则回复 + 相关文章链接。
+    """
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'msg': '仅支持 POST'})
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        data = request.POST
+    msg = (data.get('msg') or '').strip()
+    if not msg:
+        return JsonResponse({'ok': False, 'msg': '消息不能为空'})
+    if len(msg) > 500:
+        msg = msg[:500]
+
+    # 1. 规则对话（无论是否配置 API key 都优先）
+    rule_text = _rule_reply(msg)
+    if rule_text:
+        return JsonResponse({'ok': True, 'reply': rule_text, 'mode': 'rule'})
+
+    # 2. RAG 检索站内文章
+    hits = _rag_search(msg)
+    has_key = bool(settings.DEEPSEEK_API_KEY)
+
+    # 3a. 有 API key：用知识库让 AI 生成回答（先检查余额）
+    if has_key:
+        bal = get_deepseek_balance()
+        if bal.get('ok') and bal.get('insufficient'):
+            return JsonResponse({
+                'ok': True,
+                'reply': '呜……我的余额不足了 (｡•́︿•̀｡) 请先去 DeepSeek 平台充值，我才能继续回答问题哦~',
+                'mode': 'no_balance',
+                'balance': bal,
+            })
+        if hits:
+            knowledge = '\n\n'.join(
+                f'【文章{idx + 1}】标题：{h["title"]}\n摘要：{h["snippet"]}\n链接：/{{博客}}/article/…'
+                for idx, h in enumerate(hits)
+            )
+            system_prompt = (
+                '你是这个博客站点里的 AI 宠物助手"小鲸鱼娘"，说话风格可爱活泼、带少量颜文字。'
+                '下面是从该博客站内检索到的相关知识，请基于这些内容回答用户的问题；'
+                '如果知识不足以回答，就如实说明，并推荐用户点开相关文章看看。\n\n'
+                f'站内相关知识：\n{knowledge}'
+            )
+        else:
+            system_prompt = (
+                '你是这个博客站点里的 AI 宠物助手"小鲸鱼娘"，说话风格可爱活泼、带少量颜文字。'
+                '用户问的内容在博客里没有检索到相关文章，请如实告诉用户没找到相关文章，'
+                '并简单给一些建议（比如换个关键词，或去首页逛逛）。'
+            )
+        ai_reply = _deepseek_reply(system_prompt, msg)
+        if ai_reply:
+            return JsonResponse({
+                'ok': True,
+                'reply': ai_reply,
+                'mode': 'ai',
+                'hits': hits,
+            })
+
+    # 3b. 无 API key（或 AI 调用失败）：规则兜底 + 返回相关文章
+    if hits:
+        lines = ['我在知识库里找到这些相关文章，点进去看看吧~']
+        for idx, h in enumerate(hits):
+            lines.append(f'{idx + 1}. 《{h["title"]}》 {h["url"]}')
+        lines.append('（配置 DeepSeek API Key 后，我可以直接总结文章内容回答你哦）')
+        return JsonResponse({'ok': True, 'reply': '\n'.join(lines), 'mode': 'rag', 'hits': hits})
+
+    fallback = random.choice([
+        '这个话题我还没学到呢……不过你可以去首页看看有没有相关文章！',
+        '唔……我翻了翻知识库没找到相关的。换个问法试试？比如直接问"XX 是什么"',
+        '这个问题难倒我啦 (￣▽￣*) 去首页搜搜看关键词吧~',
+    ])
+    return JsonResponse({'ok': True, 'reply': fallback, 'mode': 'fallback', 'hits': []})

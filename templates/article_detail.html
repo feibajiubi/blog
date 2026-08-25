@@ -59,11 +59,41 @@
     .clear {
         clear: both;
     }
+    .article-stat-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 18px;
+        padding: 12px 14px;
+        background: #f6f8ff;
+        border: 1px solid #dbe3f7;
+        border-radius: 8px;
+    }
+    .stat-chip {
+        font-size: 13px;
+        color: #555;
+        padding: 4px 12px;
+        background: #fff;
+        border-radius: 14px;
+        border: 1px solid #e0e6f5;
+    }
+    .stat-chip b { font-size: 15px; }
+    .stat-chip .glyphicon { margin-right: 2px; }
+    .stat-up b, .stat-up .glyphicon { color: #e0433f; }
+    .stat-read b, .stat-read .glyphicon { color: #203170; }
+    .stat-comment b, .stat-comment .glyphicon { color: #2fa24c; }
+    .stat-down b, .stat-down .glyphicon { color: #8a8a8a; }
     </style>
 {% endblock %}
 
 {% block page_content %}
     <div class="col-md-10 col-md-offset-1 article-content">
+        <div class="article-stat-bar">
+            <span class="stat-chip stat-up"><span class="glyphicon glyphicon-thumbs-up"></span> 点赞 <b>{{ article_obj.up_num }}</b></span>
+            <span class="stat-chip stat-read"><span class="glyphicon glyphicon-eye-open"></span> 阅读 <b>{{ article_obj.read_num }}</b></span>
+            <span class="stat-chip stat-comment"><span class="glyphicon glyphicon-comment"></span> 评论 <b>{{ article_obj.comment_num }}</b></span>
+            <span class="stat-chip stat-down"><span class="glyphicon glyphicon-thumbs-down"></span> 点踩 <b>{{ article_obj.down_num }}</b></span>
+        </div>
         {{ article_obj.content|safe }}
 
         <div class="clearfix article-footer">

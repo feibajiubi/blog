@@ -18,6 +18,10 @@
     .day-gray{color:#999;cursor:default;}
     .day-link{color:#6600cc;text-decoration:underline;cursor:pointer;}
     .article-meta{text-align:right;margin-top:10px;color:#666;font-size:13px;}
+    .site-stats{display:flex;flex-wrap:wrap;gap:8px 28px;padding:14px 16px;}
+    .stat-item{font-size:14px;color:#555;}
+    .stat-item b{color:#203170;font-size:16px;}
+    .stat-item .glyphicon{color:#4a6bb8;}
     </style>
     <link rel="stylesheet" href="/media/{{ blog.site_theme }}">
 {% endblock %}
@@ -31,6 +35,21 @@
         </div>
         <div class="col-md-9">
             {% block page_content %}
+                <div class="panel panel-default" style="border-color:#203170;">
+                    <div class="panel-heading" style="background:#203170;color:#fff;">
+                        <h3 class="panel-title">
+                            <span class="glyphicon glyphicon-stats"></span>
+                            {{ blog.site_title }} 站点数据
+                        </h3>
+                    </div>
+                    <div class="panel-body site-stats">
+                        <span class="stat-item"><span class="glyphicon glyphicon-file"></span> 文章 <b>{{ blog_stats.total }}</b> 篇</span>
+                        <span class="stat-item"><span class="glyphicon glyphicon-eye-open"></span> 总阅读 <b>{{ blog_stats.read }}</b></span>
+                        <span class="stat-item"><span class="glyphicon glyphicon-thumbs-up"></span> 总点赞 <b>{{ blog_stats.up }}</b></span>
+                        <span class="stat-item"><span class="glyphicon glyphicon-thumbs-down"></span> 总点踩 <b>{{ blog_stats.down }}</b></span>
+                        <span class="stat-item"><span class="glyphicon glyphicon-comment"></span> 总评论 <b>{{ blog_stats.comment }}</b></span>
+                    </div>
+                </div>
                 <ul class="media-list">
                     {% for article_obj in article_queryset %}
                         <li class="media">

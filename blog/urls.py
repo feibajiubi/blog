@@ -25,6 +25,9 @@ from blog import settings
 urlpatterns = [
     path('', lambda req: redirect('/home/')),
     path('admin/', admin.site.urls),
+    path('pet/stats/',views.pet_stats),
+    path('pet/chat/',views.pet_chat),
+    path('pet/balance/',views.pet_balance),
     path('register/',views.register,name='register'),
     path('login/',views.login),
     path('get_code/',views.get_code),

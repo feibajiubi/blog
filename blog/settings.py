@@ -15,17 +15,25 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# 加载项目根目录下的 .env 文件（存放 DEEPSEEK_API_KEY 等敏感配置）
+from dotenv import load_dotenv
+load_dotenv(BASE_DIR / '.env')
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = '***REMOVED-SECRET-KEY***'
+# 从环境变量/.env 读取；未配置时使用不安全的后备值（仅限本地开发）
+SECRET_KEY = os.environ.get(
+    'DJANGO_SECRET_KEY',
+    '***REMOVED-SECRET-KEY***'
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in ('1', 'true', 'yes')
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',')
 
 
 # Application definition
@@ -78,11 +86,11 @@ WSGI_APPLICATION = 'blog.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'blog',
-        'USER': 'root',
-        'PASSWORD': '***REMOVED-DB-PASSWORD***',
-        'HOST': 'localhost',
-        'PORT': 3306,
+        'NAME': os.environ.get('DB_NAME', 'blog'),
+        'USER': os.environ.get('DB_USER', 'root'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', '***REMOVED-DB-PASSWORD***'),
+        'HOST': os.environ.get('DB_HOST', 'localhost'),
+        'PORT': os.environ.get('DB_PORT', '3306'),
         'OPTIONS': {
             'charset': 'utf8mb4'
         }
@@ -142,3 +150,6 @@ AUTH_USER_MODEL = 'app01.UserInfo'
 LOGIN_URL='/login/'
 
 STATIC_ROOT = os.path.join(BASE_DIR, 'static_collected')
+
+# 鲸鱼娘宠物助手：DeepSeek API Key（可选；不配置时对话接口自动降级为规则回复+RAG检索）
+DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', '')
