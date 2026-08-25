@@ -163,7 +163,10 @@
     bubbleSource: null,   // 'hover' | 'click'
     posKey: 'pet_whale_pos_v2',
     pageStats: null,
+    chatHistory: [],      // 历史对话 [{role:'user'|'ai', text}]
+    inputFocused: false,  // 输入框是否聚焦（聚焦时不自动隐藏）
   }
+  var CHAT_HISTORY_MAX = 30   // 历史对话最多保留条数
 
   /* ---------- 位置模型（同原插件：始终用 left/top 表达） ---------- */
   function viewport() {
@@ -371,6 +374,8 @@
   }
 
   function hideBubble() {
+    // 输入框聚焦时不允许隐藏（避免打字过程中气泡消失）
+    if (state.inputFocused) return
     bubble.classList.remove('pet-show')
     state.bubbleShown = false
     state.bubbleSource = null
@@ -379,6 +384,8 @@
 
   function resetBubbleTimer() {
     if (state.bubbleTimer) { clearTimeout(state.bubbleTimer); state.bubbleTimer = null }
+    // 输入聚焦时不启动自动隐藏计时器
+    if (state.inputFocused) return
     state.bubbleTimer = setTimeout(hideBubble, 8000)
   }
 
@@ -472,6 +479,12 @@
       showBubble(pickOne(LINES[getPeriod()]), null, false, 'click')
       return
     }
+    // 有历史对话时：优先显示历史记录（方便继续聊）
+    if (state.chatHistory.length) {
+      state.mode = 'history'
+      showBubble('📝 历史对话：\n' + renderHistory(), null, false, 'click')
+      return
+    }
     state.mode = 'stats'
     var period = getPeriod()
     showBubble(GREETING[period] + '！让我看看数据…', null, false, 'click')
@@ -552,11 +565,34 @@
   }
 
   /* ---------- 对话 ---------- */
+  // 把用户消息和 AI 回复存入历史
+  function pushHistory(role, text) {
+    state.chatHistory.push({ role: role, text: text })
+    if (state.chatHistory.length > CHAT_HISTORY_MAX) {
+      state.chatHistory.shift()
+    }
+  }
+
+  // 渲染历史对话文本（含角色标识）
+  function renderHistory() {
+    if (!state.chatHistory.length) return ''
+    var lines = []
+    state.chatHistory.forEach(function (m) {
+      if (m.role === 'user') {
+        lines.push('🧑 ' + m.text)
+      } else {
+        lines.push('🐋 ' + m.text)
+      }
+    })
+    return lines.join('\n')
+  }
+
   function sendChat() {
     var msg = chatInput.value.trim()
     if (!msg) return
     chatInput.value = ''
     state.mode = 'chat'
+    pushHistory('user', msg)
     showBubble('让我想想……（检索站内知识库中）', null, false, 'click')
     fetch('/pet/chat/', {
       method: 'POST',
@@ -569,10 +605,12 @@
         if (!state.bubbleShown) return
         if (!d.ok) { showBubble('出错了：' + (d.msg || '未知错误'), null, false, 'click'); return }
         var text = d.reply || '…'
+        pushHistory('ai', text)
+        // 显示最新回复 + 历史对话（输入框聚焦时不会自动消失）
         if (d.hits && d.hits.length) {
-          showBubble(text + '\n\n相关文章：', d.hits, false, 'click')
+          showBubble(text + '\n\n—— 历史对话 ——\n' + renderHistory(), d.hits, false, 'click')
         } else {
-          showBubble(text, null, false, 'click')
+          showBubble(text + '\n\n—— 历史对话 ——\n' + renderHistory(), null, false, 'click')
         }
       })
       .catch(function () {
@@ -602,7 +640,19 @@
   })
   root.addEventListener('mouseleave', function () {
     if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null }
+    // 输入聚焦时不移除气泡（鼠标可能在气泡上打字）
+    if (state.inputFocused) return
     if (state.bubbleShown && state.bubbleSource === 'hover') hideBubble()
+  })
+
+  /* 输入框聚焦/失焦：聚焦时暂停自动隐藏 */
+  chatInput.addEventListener('focus', function () {
+    state.inputFocused = true
+    if (state.bubbleTimer) { clearTimeout(state.bubbleTimer); state.bubbleTimer = null }
+  })
+  chatInput.addEventListener('blur', function () {
+    state.inputFocused = false
+    if (state.bubbleShown) resetBubbleTimer()
   })
 
   /* 点击页面其他位置关闭气泡 */
