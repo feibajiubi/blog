@@ -334,14 +334,16 @@
   }
 
   root.addEventListener('mousedown', function (e) {
-    e.preventDefault()
     if (e.button !== 0) return
-    if (e.target.closest && e.target.closest('.pet-chat-row')) return
+    // 点击气泡内部：放行（让输入框能聚焦、按钮/链接可点），不启动拖拽
+    if (e.target.closest && e.target.closest('.pet-bubble')) return
+    e.preventDefault()
     startDrag(e.clientX, e.clientY)
   })
   root.addEventListener('touchstart', function (e) {
     if (e.touches.length !== 1) return
-    if (e.target.closest && e.target.closest('.pet-chat-row')) return
+    // 点击气泡内部：放行
+    if (e.target.closest && e.target.closest('.pet-bubble')) return
     startDrag(e.touches[0].clientX, e.touches[0].clientY)
   }, { passive: true })
 
