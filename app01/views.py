@@ -975,6 +975,38 @@ def crawl_import(request):
 
 # ==================== 数据看板 ====================
 
+def _find_cjk_font():
+    """自动检测可用中文字体（Windows/Linux 通用），找不到返回 None"""
+    import os as _os
+    candidates = [
+        # Windows 常见中文字体
+        'C:/Windows/Fonts/msyh.ttc',          # 微软雅黑
+        'C:/Windows/Fonts/simhei.ttf',        # 黑体
+        'C:/Windows/Fonts/simsun.ttc',        # 宋体
+        # Linux 常见中文字体（Noto CJK / 文泉驿）
+        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+        '/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc',
+        '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',
+        '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc',
+        '/usr/share/fonts/truetype/arphic/uming.ttc',
+    ]
+    for p in candidates:
+        if _os.path.exists(p):
+            return p
+    # 兜底：用 fc-list 搜索
+    try:
+        import subprocess
+        out = subprocess.run(['fc-list', ':lang=zh', 'file'], capture_output=True,
+                             text=True, timeout=5).stdout
+        for line in out.splitlines():
+            path = line.split(':')[0].strip()
+            if path and _os.path.exists(path):
+                return path
+    except Exception:
+        pass
+    return None
+
+
 def rss_feed(request):
     """RSS 订阅：输出全站文章（按时间倒序，最新在前）"""
     from xml.sax.saxutils import escape
@@ -1122,7 +1154,8 @@ def dashboard(request):
                 # 分词 + 过滤单字
                 segs = [w for w in jieba.cut(all_text) if len(w.strip()) > 1]
                 freq_text = ' '.join(segs)
-                font_path = 'C:/Windows/Fonts/msyh.ttc'  # 微软雅黑
+                # 自动检测可用中文字体（Windows / Linux 通用）
+                font_path = _find_cjk_font()
                 wc = WordCloud(
                     font_path=font_path,
                     width=900, height=500,
