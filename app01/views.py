@@ -960,9 +960,8 @@ def crawl_import(request):
 
 # ==================== 数据看板 ====================
 
-@login_required
 def dashboard(request):
-    """数据看板：文章/阅读/点赞/评论/用户/分类/标签统计 + 词云"""
+    """数据看板：文章/阅读/点赞/评论/用户/分类/标签统计 + 词云（公开，无需登录）"""
     from django.db.models.functions import TruncMonth
 
     # ---- 概览 ----
