@@ -32,8 +32,40 @@ def _get(url):
 
 
 def _is_article_url(url):
-    """判断 URL 是否为单篇文章链接（博客园文章 URL 含 /p/ 或 /archive/）"""
+    """判断 URL 是否为单篇文章链接（博客园文章 URL 含 /p/ 或 /archive/）。
+    排除 sitehome/p/N 这类首页分页链接。
+    """
+    if re.search(r'/sitehome/p/\d+', url):
+        return False
     return bool(re.search(r'/p/\d+', url)) or bool(re.search(r'/archive/\d+', url))
+
+
+def normalize_url(url):
+    """规范化博客园 URL：
+    1) 首页 hash 分页 #p100 → sitehome/p/100（hash 不会发给服务器）
+    2) 首页不带 hash → sitehome/p/1
+    3) 用户主页 hash 分页 username/#pN → username/default.html?page=N
+    """
+    url = url.strip()
+    # 拆分 hash
+    base, _, frag = url.partition('#')
+    page = None
+    if frag:
+        m = re.search(r'p(\d+)', frag)
+        if m:
+            page = int(m.group(1))
+    if page is None:
+        return url
+    base = base.rstrip('/')
+    # 首页：https://www.cnblogs.com 或 https://www.cnblogs.com/
+    if re.match(r'https?://(www\.)?cnblogs\.com/?$', base):
+        return f'{base}/sitehome/p/{page}'
+    # 用户主页：https://www.cnblogs.com/username
+    m = re.match(r'(https?://(www\.)?cnblogs\.com/[\w\-]+)$', base)
+    if m:
+        return f'{m.group(1)}/default.html?page={page}'
+    # 其他：去掉 hash 原样返回
+    return base
 
 
 def fetch_article_list(url):
@@ -41,6 +73,7 @@ def fetch_article_list(url):
     [{title, url, summary, author, pub_time}]
     若传入的是单篇文章链接，则返回单篇候选。
     """
+    url = normalize_url(url)
     resp = _get(url)
     soup = BeautifulSoup(resp.text, 'html.parser')
 
