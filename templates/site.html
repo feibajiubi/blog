@@ -51,7 +51,7 @@
                     </div>
                 </div>
                 <ul class="media-list">
-                    {% for article_obj in article_queryset %}
+                    {% for article_obj in article_page %}
                         <li class="media">
                             <h4 class="media-heading"><a href="/{{ article_obj.blog.userinfo.username }}/article/{{ article_obj.id }}">{{ article_obj.title }}</a></h4>
                             <div class="media-body">
@@ -68,6 +68,30 @@
                         </li>
                     {% endfor %}
                 </ul>
+                <!-- 分页导航（仿博客园） -->
+                {% if article_page.paginator.num_pages > 1 %}
+                <nav aria-label="Page navigation" style="margin-top:20px;">
+                    <ul class="pagination">
+                        {% if article_page.has_previous %}
+                            <li><a href="?page={{ article_page.previous_page_number }}">&laquo; 上一页</a></li>
+                        {% else %}
+                            <li class="disabled"><span>&laquo; 上一页</span></li>
+                        {% endif %}
+                        {% for num in article_page.paginator.page_range %}
+                            {% if num == article_page.number %}
+                                <li class="active"><span>{{ num }}</span></li>
+                            {% elif num >= article_page.number|add:-3 and num <= article_page.number|add:3 %}
+                                <li><a href="?page={{ num }}">{{ num }}</a></li>
+                            {% endif %}
+                        {% endfor %}
+                        {% if article_page.has_next %}
+                            <li><a href="?page={{ article_page.next_page_number }}">下一页 &raquo;</a></li>
+                        {% else %}
+                            <li class="disabled"><span>下一页 &raquo;</span></li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                {% endif %}
             {% endblock %}
         </div>
     </div>

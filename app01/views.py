@@ -103,7 +103,8 @@ def get_code(request):
     return HttpResponse(data)
 
 def home(request):
-    article_queryset=models.Article.objects.all().order_by('-up_num')
+    # 首页文章：按发布时间倒序（最新在前）
+    article_queryset=models.Article.objects.all().order_by('-create_time','-id')
 
     # 获取所有分类和标签，供首页筛选悬浮框使用
     all_categories=models.Category.objects.all()
@@ -142,6 +143,17 @@ def home(request):
     # 作者推荐：所有博客站点
     blog_list=models.Blog.objects.all()
 
+    # 分页：每页12篇（仿博客园）
+    from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+    paginator = Paginator(article_queryset, 12)
+    page_num = request.GET.get('page')
+    try:
+        article_page = paginator.page(page_num)
+    except PageNotAnInteger:
+        article_page = paginator.page(1)
+    except EmptyPage:
+        article_page = paginator.page(paginator.num_pages)
+
     return render(request,'home.html',locals())
 
 @login_required
@@ -177,9 +189,9 @@ def site(request,username,**kwargs):
     user_obj=models.UserInfo.objects.filter(username=username).first()
     if not user_obj:
         return render(request,'error.html',locals())
-    #获取当前用户所有文章
+    #获取当前用户所有文章（按发布时间倒序，最新在前）
     blog=user_obj.blog
-    article_queryset=models.Article.objects.filter(blog=blog)
+    article_queryset=models.Article.objects.filter(blog=blog).order_by('-create_time','-id')
     #如果还有多余参数，还需要再次过滤
     if kwargs:
         condition=kwargs.get('condition')
@@ -224,6 +236,17 @@ def site(request,username,**kwargs):
         down=_Sum('down_num') or 0,
         comment=_Sum('comment_num') or 0,
     )
+
+    # 分页：每页12篇（仿博客园）
+    from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+    paginator = Paginator(article_queryset, 12)
+    page_num = request.GET.get('page')
+    try:
+        article_page = paginator.page(page_num)
+    except PageNotAnInteger:
+        article_page = paginator.page(1)
+    except EmptyPage:
+        article_page = paginator.page(paginator.num_pages)
 
     return render(request,'site.html',locals())
 

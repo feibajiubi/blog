@@ -166,7 +166,7 @@
             </div>
         </div>
         <div class="col-md-8">
-            {% for article_obj in article_queryset %}
+            {% for article_obj in article_page %}
                 <div class="media">
                 <h4 class="media-heading"><a href="/{{ article_obj.blog.userinfo.username }}/article/{{ article_obj.id }}">{{ article_obj.title }}</a></h4>
                     <div class="media-left">
@@ -186,6 +186,30 @@
                 <span>&nbsp;<span class="glyphicon glyphicon-eye-open"></span>{{ article_obj.read_num }}</span>&nbsp;&nbsp;
                 </div>
             {% endfor %}
+            <!-- 分页导航（仿博客园） -->
+            {% if article_page.paginator.num_pages > 1 %}
+            <nav aria-label="Page navigation" style="margin-top:20px;">
+                <ul class="pagination">
+                    {% if article_page.has_previous %}
+                        <li><a href="?page={{ article_page.previous_page_number }}{% if current_category %}&category={{ current_category|urlencode }}{% endif %}{% if current_tag %}&tag={{ current_tag|urlencode }}{% endif %}{% if current_liked %}&liked={{ current_liked }}{% endif %}{% if search_q %}&q={{ search_q|urlencode }}{% endif %}">&laquo; 上一页</a></li>
+                    {% else %}
+                        <li class="disabled"><span>&laquo; 上一页</span></li>
+                    {% endif %}
+                    {% for num in article_page.paginator.page_range %}
+                        {% if num == article_page.number %}
+                            <li class="active"><span>{{ num }}</span></li>
+                        {% elif num >= article_page.number|add:-3 and num <= article_page.number|add:3 %}
+                            <li><a href="?page={{ num }}{% if current_category %}&category={{ current_category|urlencode }}{% endif %}{% if current_tag %}&tag={{ current_tag|urlencode }}{% endif %}{% if current_liked %}&liked={{ current_liked }}{% endif %}{% if search_q %}&q={{ search_q|urlencode }}{% endif %}">{{ num }}</a></li>
+                        {% endif %}
+                    {% endfor %}
+                    {% if article_page.has_next %}
+                        <li><a href="?page={{ article_page.next_page_number }}{% if current_category %}&category={{ current_category|urlencode }}{% endif %}{% if current_tag %}&tag={{ current_tag|urlencode }}{% endif %}{% if current_liked %}&liked={{ current_liked }}{% endif %}{% if search_q %}&q={{ search_q|urlencode }}{% endif %}">下一页 &raquo;</a></li>
+                    {% else %}
+                        <li class="disabled"><span>下一页 &raquo;</span></li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
         </div>
         <div class="col-md-2">
             <!-- 阅读排行 -->
