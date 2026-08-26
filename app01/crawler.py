@@ -31,29 +31,75 @@ def _get(url):
     return resp
 
 
+def _is_article_url(url):
+    """判断 URL 是否为单篇文章链接（博客园文章 URL 含 /p/ 或 /archive/）"""
+    return bool(re.search(r'/p/\d+', url)) or bool(re.search(r'/archive/\d+', url))
+
+
 def fetch_article_list(url):
-    """爬取博客园列表页，返回候选文章列表：
+    """爬取博客园列表页（兼容新版/旧版/自定义主题布局），返回候选文章列表：
     [{title, url, summary, author, pub_time}]
+    若传入的是单篇文章链接，则返回单篇候选。
     """
     resp = _get(url)
     soup = BeautifulSoup(resp.text, 'html.parser')
-    items = soup.select('.post-item') or soup.select('.post_item')
+
+    # 情况1：输入的是单篇文章链接 → 直接作为一篇候选
+    if _is_article_url(url):
+        detail = fetch_article_detail(url)
+        if detail['title'] and detail['content_html']:
+            return [{
+                'title': detail['title'],
+                'url': url,
+                'summary': make_desc(detail['content_text']),
+                'author': '',
+                'pub_time': '',
+            }]
+        return []
+
+    # 情况2：列表页，兼容多种布局选择器
+    #  新版首页：.post-item
+    #  用户主页旧版：.day .postTitle + .c_b_p_desc
+    #  聚合页：.post_item
     results = []
+    seen_urls = set()
+
+    items = []
+    items.extend(soup.select('.post-item'))          # 新版
+    items.extend(soup.select('.post_item'))          # 聚合页
+    items.extend(soup.select('.day'))                # 旧版按天分组的容器
+    items.extend(soup.select('.entrylistPosttitle')) # 文章列表页
+
     for it in items:
-        title_el = it.select_one('.post-item-title') or it.select_one('.titlelnk') or it.select_one('a')
+        title_el = None
+        if it.get('class') and 'day' in it.get('class'):
+            title_el = it.select_one('.postTitle a') or it.select_one('.day_title a') or it.select_one('a')
+        else:
+            title_el = (it.select_one('.post-item-title')
+                        or it.select_one('.titlelnk')
+                        or it.select_one('.entrylistPosttitle a')
+                        or it.select_one('a'))
         if not title_el:
             continue
         title = title_el.get_text(strip=True)
         href = title_el.get('href')
         if not title or not href:
             continue
-        # 摘要
-        sum_el = it.select_one('.post-item-summary')
-        summary = sum_el.get_text(' ', strip=True)[:255] if sum_el else ''
-        # 底部信息：作者 + 时间（如 "yuyuyui 2026-08-26 19:52 0 0 13"）
+        if href in seen_urls:
+            continue
+        seen_urls.add(href)
+
+        # 摘要（不同布局的摘要类名不同）
+        summary = ''
+        for sel in ('.post-item-summary', '.post_item_summary', '.c_b_p_desc', '.entrylistPostSummary'):
+            sum_el = it.select_one(sel)
+            if sum_el:
+                summary = sum_el.get_text(' ', strip=True)[:255]
+                break
+        # 底部信息：作者 + 时间
         author = ''
         pub_time = ''
-        foot_el = it.select_one('.post-item-foot')
+        foot_el = it.select_one('.post-item-foot') or it.select_one('.post_item_foot')
         if foot_el:
             foot_text = foot_el.get_text(' ', strip=True)
             m = re.match(r'([\w\u4e00-\u9fa5\-\.]+)\s+(\d{4}-\d{2}-\d{2})', foot_text)
