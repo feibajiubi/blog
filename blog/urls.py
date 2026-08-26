@@ -41,6 +41,7 @@ urlpatterns = [
     path('crawl/list/',views.crawl_article_list),
     path('crawl/import/',views.crawl_import),
     path('dashboard/',views.dashboard),
+    path('rss/',views.rss_feed),
     path('add_article/',views.add_article),
     path('add_category/',views.add_category),
     path('add_tag/',views.add_tag),

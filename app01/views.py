@@ -103,8 +103,8 @@ def get_code(request):
     return HttpResponse(data)
 
 def home(request):
-    # 首页文章：按发布时间倒序（最新在前）
-    article_queryset=models.Article.objects.all().order_by('-create_time','-id')
+    # 首页文章：按发布时间倒序（最新在前），select_related 预取作者/站点消除 N+1
+    article_queryset=models.Article.objects.all().select_related('blog__userinfo','category').order_by('-create_time','-id')
 
     # 获取所有分类和标签，供首页筛选悬浮框使用
     all_categories=models.Category.objects.all()
@@ -116,9 +116,14 @@ def home(request):
     current_liked=request.GET.get('liked','')
     search_q=request.GET.get('q','')
 
-    # 按搜索关键词筛选（匹配文章标题）
+    # 按搜索关键词筛选（匹配标题 + 正文 + 摘要）
     if search_q:
-        article_queryset=article_queryset.filter(title__icontains=search_q)
+        from django.db.models import Q as _Q
+        article_queryset=article_queryset.filter(
+            _Q(title__icontains=search_q) |
+            _Q(content__icontains=search_q) |
+            _Q(desc__icontains=search_q)
+        )
 
     # 按分类筛选
     if current_category:
@@ -189,9 +194,9 @@ def site(request,username,**kwargs):
     user_obj=models.UserInfo.objects.filter(username=username).first()
     if not user_obj:
         return render(request,'error.html',locals())
-    #获取当前用户所有文章（按发布时间倒序，最新在前）
+    #获取当前用户所有文章（按发布时间倒序，最新在前），select_related 消除 N+1
     blog=user_obj.blog
-    article_queryset=models.Article.objects.filter(blog=blog).order_by('-create_time','-id')
+    article_queryset=models.Article.objects.filter(blog=blog).select_related('blog__userinfo','category').order_by('-create_time','-id')
     #如果还有多余参数，还需要再次过滤
     if kwargs:
         condition=kwargs.get('condition')
@@ -260,6 +265,16 @@ def article_detail(request,username,article_id):
 
     if not article_obj:
         return render(request,'error.html')
+    # XSS 防护：文章内容渲染前做白名单清洗（剔除 script/事件属性/危险协议）
+    from app01.crawler import sanitize_html
+    article_obj.safe_content = sanitize_html(article_obj.content)
+    # 上一篇 / 下一篇（按时间排序，同站点内）
+    prev_article = (models.Article.objects
+                    .filter(blog=blog, create_time__lt=article_obj.create_time)
+                    .order_by('-create_time', '-id').first())
+    next_article = (models.Article.objects
+                    .filter(blog=blog, create_time__gt=article_obj.create_time)
+                    .order_by('create_time', 'id').first())
     # 阅读量+1（F表达式原子更新，避免并发竞态）
     models.Article.objects.filter(id=article_obj.id).update(read_num=F('read_num')+1)
     article_obj.read_num += 1
@@ -960,6 +975,51 @@ def crawl_import(request):
 
 # ==================== 数据看板 ====================
 
+def rss_feed(request):
+    """RSS 订阅：输出全站文章（按时间倒序，最新在前）"""
+    from xml.sax.saxutils import escape
+    from email.utils import format_datetime
+    import datetime as _dt
+
+    articles = (models.Article.objects
+                .select_related('blog__userinfo', 'category')
+                .order_by('-create_time')[:50])
+    site_name = '博客园'  # 默认站点名
+    site_url = request.build_absolute_uri('/')
+    first = articles.first() if articles else None
+
+    items = []
+    for a in articles:
+        author = a.blog.userinfo.username if a.blog and a.blog.userinfo else ''
+        link = request.build_absolute_uri(f'/{author}/article/{a.id}')
+        # 摘要取 desc，正文作为 description 的补充
+        desc = escape(a.desc or '')
+        # create_time 是 Date 类型 → 转成当天 0 点的 datetime 再格式化
+        pub_dt = _dt.datetime.combine(a.create_time, _dt.time.min) if a.create_time else None
+        pub = format_datetime(pub_dt) if pub_dt else ''
+        items.append(f'''    <item>
+      <title>{escape(a.title)}</title>
+      <link>{escape(link)}</link>
+      <guid isPermaLink="true">{escape(link)}</guid>
+      <pubDate>{pub}</pubDate>
+      <dc:creator>{escape(author)}</dc:creator>
+      <description>{desc}</description>
+    </item>''')
+
+    xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>{escape(site_name)} - 最新文章</title>
+    <link>{escape(site_url)}</link>
+    <description>博客园风格 Django 博客的最新文章订阅</description>
+    <language>zh-cn</language>
+    <atom:link href="{escape(request.build_absolute_uri('/rss/'))}" rel="self" type="application/rss+xml"/>
+{chr(10).join(items)}
+  </channel>
+</rss>'''
+    return HttpResponse(xml, content_type='application/rss+xml; charset=utf-8')
+
+
 def dashboard(request):
     """数据看板：文章/阅读/点赞/评论/用户/分类/标签统计 + 词云（公开，无需登录）"""
     from django.db.models.functions import TruncMonth
@@ -1040,37 +1100,40 @@ def dashboard(request):
     user_names = [u.username for u in user_qs]
     user_counts = [u.cnt for u in user_qs]
 
-    # ---- 词云（jieba 分词 + wordcloud，输出 PNG）----
+    # ---- 词云（jieba 分词 + wordcloud，输出 PNG；30 分钟缓存避免重复分词）----
     wordcloud_url = None
+    import os as _os
+    media_dir = _os.path.join(settings.MEDIA_ROOT, 'analysis')
+    wc_path = _os.path.join(media_dir, 'wordcloud.png')
     try:
-        all_text = ''
-        for title, content in models.Article.objects.values_list('title', 'content')[:200]:
-            # 提取纯文本并分词
-            plain = re.sub(r'<[^>]+>', ' ', content or '')
-            plain = re.sub(r'[\s\u3000]+', ' ', plain)
-            all_text += (title or '') + ' ' + plain + ' '
-        if len(all_text) > 50:
-            import jieba
-            from wordcloud import WordCloud
-            from PIL import Image
-            # 分词 + 过滤单字
-            segs = [w for w in jieba.cut(all_text) if len(w.strip()) > 1]
-            freq_text = ' '.join(segs)
-            font_path = 'C:/Windows/Fonts/msyh.ttc'  # 微软雅黑
-            wc = WordCloud(
-                font_path=font_path,
-                width=900, height=500,
-                background_color='white',
-                max_words=100,
-                collocations=False,
-            ).generate(freq_text)
-            # 输出到 media
-            import os
-            media_dir = os.path.join(settings.MEDIA_ROOT, 'analysis')
-            os.makedirs(media_dir, exist_ok=True)
-            wc_path = os.path.join(media_dir, 'wordcloud.png')
-            wc.to_file(wc_path)
+        if _os.path.exists(wc_path) and (time.time() - _os.path.getmtime(wc_path)) < 1800:
+            # 缓存命中：30 分钟内不重新生成
             wordcloud_url = '/media/analysis/wordcloud.png'
+        else:
+            all_text = ''
+            for title, content in models.Article.objects.values_list('title', 'content')[:200]:
+                # 提取纯文本并分词
+                plain = re.sub(r'<[^>]+>', ' ', content or '')
+                plain = re.sub(r'[\s\u3000]+', ' ', plain)
+                all_text += (title or '') + ' ' + plain + ' '
+            if len(all_text) > 50:
+                import jieba
+                from wordcloud import WordCloud
+                # 分词 + 过滤单字
+                segs = [w for w in jieba.cut(all_text) if len(w.strip()) > 1]
+                freq_text = ' '.join(segs)
+                font_path = 'C:/Windows/Fonts/msyh.ttc'  # 微软雅黑
+                wc = WordCloud(
+                    font_path=font_path,
+                    width=900, height=500,
+                    background_color='white',
+                    max_words=100,
+                    collocations=False,
+                ).generate(freq_text)
+                # 输出到 media
+                _os.makedirs(media_dir, exist_ok=True)
+                wc.to_file(wc_path)
+                wordcloud_url = '/media/analysis/wordcloud.png'
     except Exception:
         wordcloud_url = None
 

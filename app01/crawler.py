@@ -171,17 +171,10 @@ def fetch_article_detail(url):
     for sel in REMOVE_SELECTORS:
         for tag in body.select(sel):
             tag.decompose()
-    # 2. 移除 a 标签但保留文字（避免外链跳转）
-    for a in body.select('a'):
-        a.replace_with(a.get_text())
-    # 3. 移除属性（class/style/id 等），只保留结构标签与 href 类安全属性
-    for tag in body.find_all(True):
-        for attr in list(tag.attrs):
-            if attr not in ('href', 'src', 'alt', 'colspan', 'rowspan'):
-                del tag.attrs[attr]
+    # 2. XSS 白名单清洗（保留代码块/图片/表格，剔除危险标签/属性/协议）
+    content_html = sanitize_html(str(body))
 
     # 截断超长正文，避免导入超大内容
-    content_html = str(body)
     if len(content_html) > MAX_CONTENT_LEN:
         content_html = content_html[:MAX_CONTENT_LEN]
 
@@ -193,6 +186,77 @@ def make_desc(html_text, max_len=255):
     """从正文文本提取摘要（前 N 字）"""
     text = re.sub(r'\s+', ' ', html_text or '').strip()
     return text[:max_len]
+
+
+# ---------- XSS 白名单清洗 ----------
+# 允许保留的标签（博客正文常用）
+ALLOWED_TAGS = {
+    'p', 'br', 'hr', 'div', 'span', 'blockquote', 'pre', 'code',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'ul', 'ol', 'li', 'dl', 'dt', 'dd',
+    'table', 'thead', 'tbody', 'tr', 'th', 'td',
+    'img', 'a', 'strong', 'b', 'em', 'i', 'u', 'del', 's',
+    'font', 'sub', 'sup', 'small',
+}
+# 允许保留的属性（白名单）
+ALLOWED_ATTRS = {
+    'a': ['href', 'title', 'target', 'rel'],
+    'img': ['src', 'alt', 'title', 'width', 'height'],
+    'td': ['colspan', 'rowspan', 'align', 'width'],
+    'th': ['colspan', 'rowspan', 'align', 'width'],
+    'tr': ['align'],
+    'table': ['border', 'cellpadding', 'cellspacing', 'width', 'align'],
+    'font': ['color', 'size', 'face'],
+    'div': ['align'],
+    'p': ['align'],
+    'code': ['class'],
+    'pre': ['class'],
+}
+# 危险链接协议（拒绝 javascript: / data: 等）
+DANGEROUS_PROTOCOLS = ('javascript:', 'data:', 'vbscript:', 'file:')
+
+
+def sanitize_html(html_content):
+    """XSS 白名单清洗：只保留安全标签/属性，剔除事件属性和危险协议。
+    用 BeautifulSoup 实现（等效 bleach 白名单过滤）。
+    """
+    if not html_content:
+        return ''
+    soup = BeautifulSoup(html_content, 'html.parser')
+
+    # 1. 移除 script/style/iframe/object/embed 等危险标签
+    for tag in soup.find_all(['script', 'style', 'iframe', 'object', 'embed',
+                              'link', 'meta', 'base', 'form', 'input',
+                              'button', 'textarea', 'select', 'option']):
+        tag.decompose()
+
+    # 2. 遍历所有标签：剔除不在白名单的标签（保留其文本），清理属性
+    for tag in soup.find_all(True):
+        # 标签不在白名单 → 替换为子内容（保留文字）
+        if tag.name not in ALLOWED_TAGS:
+            tag.unwrap()
+            continue
+        # 白名单属性过滤
+        allowed = ALLOWED_ATTRS.get(tag.name, set())
+        for attr in list(tag.attrs):
+            # 事件属性（on*）一律剔除
+            if attr.lower().startswith('on'):
+                del tag.attrs[attr]
+                continue
+            # 非白名单属性剔除
+            if attr not in allowed:
+                del tag.attrs[attr]
+                continue
+            # href/src 危险协议检查
+            if attr in ('href', 'src'):
+                val = tag.attrs[attr]
+                if isinstance(val, str) and val.strip().lower().startswith(DANGEROUS_PROTOCOLS):
+                    del tag.attrs[attr]
+                    continue
+                if attr == 'href':
+                    tag.attrs['rel'] = 'nofollow noopener noreferrer'
+                    tag.attrs.setdefault('target', '_blank')
+    return str(soup)
 
 
 if __name__ == '__main__':

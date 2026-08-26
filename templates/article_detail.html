@@ -94,7 +94,23 @@
             <span class="stat-chip stat-comment"><span class="glyphicon glyphicon-comment"></span> 评论 <b>{{ article_obj.comment_num }}</b></span>
             <span class="stat-chip stat-down"><span class="glyphicon glyphicon-thumbs-down"></span> 点踩 <b>{{ article_obj.down_num }}</b></span>
         </div>
-        {{ article_obj.content|safe }}
+        {{ article_obj.safe_content|safe }}
+
+        <!-- 上一篇 / 下一篇 -->
+        <nav style="margin-top:24px;">
+            <ul class="pager">
+                {% if prev_article %}
+                    <li class="previous"><a href="/{{ username }}/article/{{ prev_article.id }}">&larr; 上一篇：{{ prev_article.title|truncatechars:20 }}</a></li>
+                {% else %}
+                    <li class="previous disabled"><a href="javascript:void(0)">&larr; 已是第一篇</a></li>
+                {% endif %}
+                {% if next_article %}
+                    <li class="next"><a href="/{{ username }}/article/{{ next_article.id }}">下一篇：{{ next_article.title|truncatechars:20 }} &rarr;</a></li>
+                {% else %}
+                    <li class="next disabled"><a href="javascript:void(0)">已是最后一篇 &rarr;</a></li>
+                {% endif %}
+            </ul>
+        </nav>
 
         <div class="clearfix article-footer">
             <div class="article-meta-detail">
