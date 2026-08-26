@@ -956,8 +956,15 @@ def dashboard(request):
     # ---- 近12个月发文趋势 ----
     import datetime
     today = date.today()
-    start = today.replace(year=today.year - 1, month=today.month + 1) if today.month < 12 \
-        else today.replace(year=today.year - 1, month=1)
+    # 起始日期 = 12 个月前（含当月共 12 个月）的月初
+    start = today.replace(day=1)
+    for _ in range(11):
+        m = start.month - 1
+        y = start.year
+        if m == 0:
+            m = 12
+            y -= 1
+        start = datetime.date(y, m, 1)
     month_qs = (models.Article.objects
                 .filter(create_time__gte=start)
                 .annotate(month=TruncMonth('create_time'))
