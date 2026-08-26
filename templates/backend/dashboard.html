@@ -1,0 +1,182 @@
+{% extends 'backend/backend.html' %}
+{% block title %}数据看板{% endblock %}
+
+{% block page_content %}
+<!-- 概览卡片 -->
+<div class="row">
+    <div class="col-md-2 col-sm-4"><div class="panel panel-primary"><div class="panel-heading text-center">文章总数</div><div class="panel-body text-center stat-num">{{ overview.articles }}</div></div></div>
+    <div class="col-md-2 col-sm-4"><div class="panel panel-success"><div class="panel-heading text-center">总阅读量</div><div class="panel-body text-center stat-num">{{ overview.reads }}</div></div></div>
+    <div class="col-md-2 col-sm-4"><div class="panel panel-danger"><div class="panel-heading text-center">总点赞数</div><div class="panel-body text-center stat-num">{{ overview.ups }}</div></div></div>
+    <div class="col-md-2 col-sm-4"><div class="panel panel-info"><div class="panel-heading text-center">总评论数</div><div class="panel-body text-center stat-num">{{ overview.comments }}</div></div></div>
+    <div class="col-md-2 col-sm-4"><div class="panel panel-warning"><div class="panel-heading text-center">用户数</div><div class="panel-body text-center stat-num">{{ overview.users }}</div></div></div>
+    <div class="col-md-2 col-sm-4"><div class="panel panel-default"><div class="panel-heading text-center">分类/标签</div><div class="panel-body text-center stat-num">{{ overview.categories }} / {{ overview.tags }}</div></div></div>
+</div>
+
+<!-- 图表区 -->
+<div class="row">
+    <div class="col-md-7">
+        <div class="panel panel-default">
+            <div class="panel-heading">近 12 个月发文趋势</div>
+            <div class="panel-body"><div id="chart-trend" style="height:300px;"></div></div>
+        </div>
+    </div>
+    <div class="col-md-5">
+        <div class="panel panel-default">
+            <div class="panel-heading">分类分布</div>
+            <div class="panel-body"><div id="chart-category" style="height:300px;"></div></div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="panel panel-default">
+            <div class="panel-heading">标签 Top10</div>
+            <div class="panel-body"><div id="chart-tag" style="height:280px;"></div></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="panel panel-default">
+            <div class="panel-heading">用户活跃 Top10（发文数）</div>
+            <div class="panel-body"><div id="chart-user" style="height:280px;"></div></div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="panel panel-default">
+            <div class="panel-heading">阅读量 Top10</div>
+            <div class="panel-body"><div id="chart-read" style="height:300px;"></div></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="panel panel-default">
+            <div class="panel-heading">点赞量 Top10</div>
+            <div class="panel-body"><div id="chart-up" style="height:300px;"></div></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="panel panel-default">
+            <div class="panel-heading">评论量 Top10</div>
+            <div class="panel-body"><div id="chart-comment" style="height:300px;"></div></div>
+        </div>
+    </div>
+</div>
+
+{% if wordcloud_url %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="panel panel-default">
+            <div class="panel-heading">全站词云（jieba 分词 + WordCloud）</div>
+            <div class="panel-body text-center">
+                <img src="{{ wordcloud_url }}" alt="词云" class="img-responsive" style="display:inline-block;">
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block js %}
+{{ block.super }}
+{% load static %}
+<script src="{% static 'js/echarts.min.js' %}"></script>
+<script>
+$(function () {
+    if (typeof echarts === 'undefined') {
+        $('#chart-trend').text('ECharts 加载失败（CDN 不可达）');
+        return;
+    }
+    var trendMonths = {{ trend_months|safe }};
+    var trendCounts = {{ trend_counts|safe }};
+    var catNames = {{ category_names|safe }};
+    var catCounts = {{ category_counts|safe }};
+    var tagNames = {{ tag_names|safe }};
+    var tagCounts = {{ tag_counts|safe }};
+    var userNames = {{ user_names|safe }};
+    var userCounts = {{ user_counts|safe }};
+
+    // 排行数据：[标题, 数值] 数组
+    var readTop = {{ read_top|safe }};
+    var upTop = {{ up_top|safe }};
+    var commentTop = {{ comment_top|safe }};
+
+    // 1. 发文趋势 - 折线图
+    var chart = echarts.init(document.getElementById('chart-trend'));
+    chart.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: 40, right: 20, top: 30, bottom: 30 },
+        xAxis: { type: 'category', data: trendMonths },
+        yAxis: { type: 'value', minInterval: 1 },
+        series: [{
+            name: '发文数', type: 'line', smooth: true,
+            data: trendCounts,
+            areaStyle: { opacity: 0.2 },
+            itemStyle: { color: '#203170' }
+        }]
+    });
+
+    // 2. 分类分布 - 饼图
+    var chart2 = echarts.init(document.getElementById('chart-category'));
+    chart2.setOption({
+        tooltip: { trigger: 'item' },
+        legend: { orient: 'vertical', left: 'left' },
+        series: [{
+            type: 'pie', radius: '60%',
+            data: catNames.map(function (n, i) { return { name: n, value: catCounts[i] }; }),
+            emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,0.3)' } }
+        }]
+    });
+
+    // 3. 标签 Top10 - 柱状图
+    var chart3 = echarts.init(document.getElementById('chart-tag'));
+    chart3.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: 40, right: 20, top: 30, bottom: 30 },
+        xAxis: { type: 'category', data: tagNames },
+        yAxis: { type: 'value', minInterval: 1 },
+        series: [{ type: 'bar', data: tagCounts, itemStyle: { color: '#4a6bb8' } }]
+    });
+
+    // 4. 用户活跃 Top10 - 横向柱状图
+    var chart4 = echarts.init(document.getElementById('chart-user'));
+    chart4.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { left: 60, right: 30, top: 10, bottom: 30 },
+        xAxis: { type: 'value', minInterval: 1 },
+        yAxis: { type: 'category', data: userNames.slice().reverse() },
+        series: [{ type: 'bar', data: userCounts.slice().reverse(), itemStyle: { color: '#5cb85c' } }]
+    });
+
+    // 通用排行渲染函数（横向柱状图）
+    function renderRank(elId, data) {
+        var names = data.map(function (d) { return d[0]; }).reverse();
+        var vals = data.map(function (d) { return d[1]; }).reverse();
+        var c = echarts.init(document.getElementById(elId));
+        c.setOption({
+            tooltip: { trigger: 'axis' },
+            grid: { left: 90, right: 30, top: 10, bottom: 30 },
+            xAxis: { type: 'value', minInterval: 1 },
+            yAxis: { type: 'category', data: names },
+            series: [{ type: 'bar', data: vals, itemStyle: { color: '#e67e22' } }]
+        });
+    }
+    renderRank('chart-read', readTop);
+    renderRank('chart-up', upTop);
+    renderRank('chart-comment', commentTop);
+
+    // 窗口缩放时重绘
+    window.addEventListener('resize', function () {
+        [chart, chart2, chart3, chart4].forEach(function (c) { c.resize(); });
+        ['chart-read', 'chart-up', 'chart-comment'].forEach(function (id) {
+            var inst = echarts.getInstanceByDom(document.getElementById(id));
+            if (inst) inst.resize();
+        });
+    });
+});
+</script>
+<style>
+.stat-num { font-size: 26px; font-weight: bold; color: #203170; }
+</style>
+{% endblock %}

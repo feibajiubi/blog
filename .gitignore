@@ -24,3 +24,6 @@ Thumbs.db
 
 # 日志
 *.log
+
+# 运行产物（词云等）
+media/analysis/

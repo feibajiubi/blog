@@ -1,0 +1,171 @@
+{% extends 'backend/backend.html' %}
+{% block title %}文章导入{% endblock %}
+
+{% block page_content %}
+<div class="panel panel-default">
+    <div class="panel-heading">
+        <h3 class="panel-title">
+            <span class="glyphicon glyphicon-import"></span> 文章导入（博客园爬虫）
+        </h3>
+    </div>
+    <div class="panel-body">
+        <p class="text-muted">
+            输入博客园列表页地址（如 <code>https://www.cnblogs.com/</code> 或某用户主页），
+            爬取后勾选文章导入到你的站点，来源自动标记为「转载」。
+        </p>
+        <div class="input-group" style="margin-bottom:10px;">
+            <input type="text" id="crawl-url" class="form-control"
+                   placeholder="https://www.cnblogs.com/" value="https://www.cnblogs.com/">
+            <span class="input-group-btn">
+                <button class="btn btn-primary" id="btn-crawl" type="button">
+                    <span class="glyphicon glyphicon-search"></span> 爬取列表
+                </button>
+            </span>
+        </div>
+        <div id="crawl-status" class="text-danger" style="margin-bottom:10px;"></div>
+
+        <div id="crawl-result" style="display:none;">
+            <p><strong>候选文章</strong>（勾选后点导入，按标题+原文链接去重）</p>
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th style="width:30px;"><input type="checkbox" id="check-all"></th>
+                        <th>标题</th>
+                        <th style="width:140px;">作者</th>
+                        <th style="width:110px;">发布时间</th>
+                    </tr>
+                </thead>
+                <tbody id="crawl-tbody"></tbody>
+            </table>
+            <button class="btn btn-success" id="btn-import" type="button">
+                <span class="glyphicon glyphicon-download-alt"></span> 导入选中
+            </button>
+            <span id="import-status" class="text-info" style="margin-left:10px;"></span>
+        </div>
+    </div>
+</div>
+
+<div class="panel panel-default">
+    <div class="panel-heading">
+        <h3 class="panel-title"><span class="glyphicon glyphicon-time"></span> 爬取历史</h3>
+    </div>
+    <div class="panel-body">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>地址</th>
+                    <th style="width:100px;">状态</th>
+                    <th style="width:100px;">文章数</th>
+                    <th style="width:180px;">时间</th>
+                    <th>错误信息</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for rec in crawl_records %}
+                <tr>
+                    <td class="text-nowrap" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;">{{ rec.url }}</td>
+                    <td>
+                        {% if rec.status == 'success' %}<span class="label label-success">成功</span>
+                        {% elif rec.status == 'error' %}<span class="label label-danger">失败</span>
+                        {% elif rec.status == 'empty' %}<span class="label label-warning">无内容</span>
+                        {% else %}<span class="label label-default">运行中</span>{% endif %}
+                    </td>
+                    <td>{{ rec.article_count }}</td>
+                    <td>{{ rec.create_time|date:'Y-m-d H:i' }}</td>
+                    <td class="text-danger" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;">{{ rec.error_msg|default:'' }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="5" class="text-center text-muted">暂无爬取记录</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block js %}
+{{ block.super }}
+<script>
+$(function () {
+    // 全选/取消
+    $('#check-all').change(function () {
+        $('#crawl-tbody input[type=checkbox]').prop('checked', this.checked);
+    });
+
+    // 爬取列表
+    $('#btn-crawl').click(function () {
+        let url = $('#crawl-url').val().trim();
+        if (!url) { $('#crawl-status').text('请输入博客园列表页地址'); return; }
+        $('#btn-crawl').prop('disabled', true).html('<span class="glyphicon glyphicon-refresh glyphicon-refresh-animate"></span> 爬取中...');
+        $('#crawl-status').text('');
+        $('#crawl-result').hide();
+        $('#crawl-tbody').empty();
+        $.ajax({
+            url: '/crawl/list/',
+            type: 'post',
+            data: {'url': url},
+            success: function (args) {
+                $('#btn-crawl').prop('disabled', false).html('<span class="glyphicon glyphicon-search"></span> 爬取列表');
+                if (!args.ok) {
+                    $('#crawl-status').text(args.msg || '爬取失败');
+                    return;
+                }
+                $('#crawl-result').show();
+                let rows = '';
+                args.articles.forEach(function (a) {
+                    rows += '<tr>'
+                        + '<td><input type="checkbox" class="article-check" value="' + a.url + '"></td>'
+                        + '<td><a href="' + a.url + '" target="_blank" title="' + a.title + '">' + a.title + '</a></td>'
+                        + '<td>' + (a.author || '') + '</td>'
+                        + '<td>' + (a.pub_time || '') + '</td>'
+                        + '</tr>';
+                });
+                $('#crawl-tbody').html(rows);
+                $('#crawl-status').text('解析到 ' + args.count + ' 篇文章，请勾选要导入的');
+            },
+            error: function () {
+                $('#btn-crawl').prop('disabled', false).html('<span class="glyphicon glyphicon-search"></span> 爬取列表');
+                $('#crawl-status').text('请求失败，请检查网络');
+            }
+        });
+    });
+
+    // 导入选中
+    $('#btn-import').click(function () {
+        let urls = [];
+        $('#crawl-tbody .article-check:checked').each(function () { urls.push($(this).val()); });
+        if (!urls.length) { $('#import-status').text('请先勾选文章'); return; }
+        $('#btn-import').prop('disabled', true);
+        $('#import-status').text('导入中，请稍候...');
+        $.ajax({
+            url: '/crawl/import/',
+            type: 'post',
+            data: {'urls[]': urls},
+            traditional: true,
+            success: function (args) {
+                $('#btn-import').prop('disabled', false);
+                if (!args.ok) { $('#import-status').text(args.msg || '导入失败'); return; }
+                let msg = '导入成功：' + args.imported + ' 篇，跳过（重复）：' + args.skipped + ' 篇，失败：' + args.failed + ' 篇';
+                $('#import-status').text(msg);
+                if (args.errors && args.errors.length) {
+                    $('#crawl-status').text('失败详情：' + args.errors.join('；'));
+                }
+                // 刷新历史记录
+                setTimeout(function () { location.reload(); }, 1200);
+            },
+            error: function () {
+                $('#btn-import').prop('disabled', false);
+                $('#import-status').text('请求失败，请重试');
+            }
+        });
+    });
+});
+</script>
+<style>
+.glyphicon-refresh-animate {
+    -animation: spin .7s infinite linear;
+    -webkit-animation: spin2 .7s infinite linear;
+}
+@-webkit-keyframes spin2 { from { -webkit-transform: rotate(0deg);} to { -webkit-transform: rotate(360deg);} }
+</style>
+{% endblock %}

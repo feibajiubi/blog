@@ -830,3 +830,219 @@ def pet_chat(request):
         '这个问题难倒我啦 (￣▽￣*) 去首页搜搜看关键词吧~',
     ])
     return JsonResponse({'ok': True, 'reply': fallback, 'mode': 'fallback', 'hits': []})
+
+
+# ==================== 文章导入爬虫 ====================
+
+@login_required
+def crawl_page(request):
+    """文章导入页面"""
+    # 爬取历史记录
+    crawl_records = models.CrawlRecord.objects.all().order_by('-create_time')[:20]
+    return render(request, 'backend/crawl.html', locals())
+
+
+@login_required
+def crawl_article_list(request):
+    """AJAX：爬取指定 URL 的列表页，返回候选文章"""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'msg': '仅支持 POST'})
+    url = request.POST.get('url', '').strip()
+    if not url:
+        return JsonResponse({'ok': False, 'msg': '请输入博客园列表页地址'})
+    if not url.startswith('http'):
+        url = 'https://' + url
+    # 记录爬取历史
+    record = models.CrawlRecord.objects.create(url=url, status='running')
+    try:
+        from app01 import crawler
+        articles = crawler.fetch_article_list(url)
+        if not articles:
+            record.status = 'empty'
+            record.error_msg = '未解析到任何文章，请确认是博客园列表页'
+            record.save()
+            return JsonResponse({'ok': False, 'msg': '未解析到文章，请确认是博客园列表页地址'})
+        record.status = 'success'
+        record.article_count = len(articles)
+        record.save()
+        return JsonResponse({'ok': True, 'articles': articles, 'count': len(articles)})
+    except Exception as e:
+        record.status = 'error'
+        record.error_msg = str(e)[:500]
+        record.save()
+        return JsonResponse({'ok': False, 'msg': f'爬取失败：{e}'})
+
+
+@login_required
+def crawl_import(request):
+    """AJAX：导入选中的文章（按 title+source_url 去重）"""
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'msg': '仅支持 POST'})
+    urls = request.POST.getlist('urls[]')
+    if not urls:
+        return JsonResponse({'ok': False, 'msg': '请先勾选要导入的文章'})
+    user_obj = models.UserInfo.objects.filter(username=request.user.username).select_related('blog').first()
+    blog = user_obj.blog if user_obj else None
+    if not blog:
+        return JsonResponse({'ok': False, 'msg': '你还没有个人站点，请先在个人信息中创建'})
+    # 默认分类：复用"转载"分类，不存在则创建一个
+    category = models.Category.objects.filter(name='转载').first()
+    if not category:
+        category = models.Category.objects.create(name='转载')
+        category.blogs.add(blog)
+
+    from app01 import crawler
+    imported, skipped, failed = 0, 0, 0
+    errors = []
+    for url in urls:
+        url = url.strip()
+        if not url:
+            continue
+        try:
+            # 去重：source_url 相同，或标题相同
+            detail = crawler.fetch_article_detail(url)
+            title = detail['title'].strip()
+            if not title or not detail['content_html']:
+                failed += 1
+                errors.append(f'{url}: 正文为空')
+                continue
+            exists = models.Article.objects.filter(
+                Q(source_url=url) | Q(title=title)
+            ).exists()
+            if exists:
+                skipped += 1
+                continue
+            desc = crawler.make_desc(detail['content_text'])
+            article = models.Article.objects.create(
+                title=title,
+                desc=desc,
+                content=detail['content_html'],
+                blog=blog,
+                category=category,
+                source='转载',
+                source_url=url,
+            )
+            imported += 1
+        except Exception as e:
+            failed += 1
+            errors.append(f'{url}: {e}')
+    return JsonResponse({
+        'ok': True,
+        'imported': imported,
+        'skipped': skipped,
+        'failed': failed,
+        'errors': errors[:10],
+    })
+
+
+# ==================== 数据看板 ====================
+
+@login_required
+def dashboard(request):
+    """数据看板：文章/阅读/点赞/评论/用户/分类/标签统计 + 词云"""
+    from django.db.models.functions import TruncMonth
+
+    # ---- 概览 ----
+    overview = {
+        'articles': models.Article.objects.count(),
+        'reads': models.Article.objects.aggregate(total=Sum('read_num'))['total'] or 0,
+        'ups': models.Article.objects.aggregate(total=Sum('up_num'))['total'] or 0,
+        'comments': models.Article.objects.aggregate(total=Sum('comment_num'))['total'] or 0,
+        'users': models.UserInfo.objects.count(),
+        'categories': models.Category.objects.count(),
+        'tags': models.Tag.objects.count(),
+    }
+
+    # ---- 近12个月发文趋势 ----
+    import datetime
+    today = date.today()
+    start = today.replace(year=today.year - 1, month=today.month + 1) if today.month < 12 \
+        else today.replace(year=today.year - 1, month=1)
+    month_qs = (models.Article.objects
+                .filter(create_time__gte=start)
+                .annotate(month=TruncMonth('create_time'))
+                .values('month')
+                .annotate(cnt=Count('id'))
+                .order_by('month'))
+    month_map = {m['month'].strftime('%Y-%m'): m['cnt'] for m in month_qs if m['month']}
+    trend_months, trend_counts = [], []
+
+    def _add_months(d, months):
+        """从 date 对象推进 N 个月，返回当月 1 日"""
+        m = d.month - 1 + months
+        y = d.year + m // 12
+        m = m % 12 + 1
+        return datetime.date(y, m, 1)
+
+    cur = _add_months(start, 0).replace(day=1)
+    for _ in range(12):
+        ym = cur.strftime('%Y-%m')
+        trend_months.append(ym)
+        trend_counts.append(month_map.get(ym, 0))
+        cur = _add_months(cur, 1)
+
+    # ---- 分类分布 ----
+    cat_qs = (models.Category.objects
+              .annotate(cnt=Count('article'))
+              .order_by('-cnt'))
+    category_names = [c.name for c in cat_qs]
+    category_counts = [c.cnt for c in cat_qs]
+
+    # ---- 标签 Top10 ----
+    tag_qs = (models.Tag.objects
+              .annotate(cnt=Count('article'))
+              .order_by('-cnt')[:10])
+    tag_names = [t.name for t in tag_qs]
+    tag_counts = [t.cnt for t in tag_qs]
+
+    # ---- 排行 Top10（转成 [[标题, 数值]] 结构，供 JS 直接使用）----
+    def top_by(field):
+        return [[t, n] for t, n in
+                models.Article.objects.order_by('-' + field)[:10].values_list('title', field)]
+
+    read_top = top_by('read_num')
+    up_top = top_by('up_num')
+    comment_top = top_by('comment_num')
+
+    # ---- 用户活跃 Top10（发文最多） ----
+    user_qs = (models.UserInfo.objects
+               .annotate(cnt=Count('blog__article'))
+               .order_by('-cnt')[:10])
+    user_names = [u.username for u in user_qs]
+    user_counts = [u.cnt for u in user_qs]
+
+    # ---- 词云（jieba 分词 + wordcloud，输出 PNG）----
+    wordcloud_url = None
+    try:
+        all_text = ''
+        for title, content in models.Article.objects.values_list('title', 'content')[:200]:
+            # 提取纯文本并分词
+            plain = re.sub(r'<[^>]+>', ' ', content or '')
+            plain = re.sub(r'[\s\u3000]+', ' ', plain)
+            all_text += (title or '') + ' ' + plain + ' '
+        if len(all_text) > 50:
+            import jieba
+            from wordcloud import WordCloud
+            from PIL import Image
+            # 分词 + 过滤单字
+            segs = [w for w in jieba.cut(all_text) if len(w.strip()) > 1]
+            freq_text = ' '.join(segs)
+            font_path = 'C:/Windows/Fonts/msyh.ttc'  # 微软雅黑
+            wc = WordCloud(
+                font_path=font_path,
+                width=900, height=500,
+                background_color='white',
+                max_words=100,
+                collocations=False,
+            ).generate(freq_text)
+            # 输出到 media
+            import os
+            media_dir = os.path.join(settings.MEDIA_ROOT, 'analysis')
+            os.makedirs(media_dir, exist_ok=True)
+            wc_path = os.path.join(media_dir, 'wordcloud.png')
+            wc.to_file(wc_path)
+            wordcloud_url = '/media/analysis/wordcloud.png'
+    except Exception:
+        wordcloud_url = None
+
+    return render(request, 'backend/dashboard.html', locals())

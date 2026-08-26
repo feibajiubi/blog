@@ -35,9 +35,23 @@ class Article(models.Model):
     blog=models.ForeignKey('Blog',on_delete=models.CASCADE,null=True)
     category=models.ForeignKey('Category',on_delete=models.CASCADE)
     tags=models.ManyToManyField('Tag')
+    # 文章来源（原创/转载）与原文链接（爬虫导入）
+    source=models.CharField(max_length=32,verbose_name='文章来源',default='原创')
+    source_url=models.URLField(verbose_name='原文链接',null=True,blank=True)
 
     def __str__(self):
         return self.title
+
+#爬取记录表
+class CrawlRecord(models.Model):
+    url=models.URLField(verbose_name='爬取地址')
+    status=models.CharField(max_length=32,verbose_name='状态',default='success')
+    article_count=models.IntegerField(verbose_name='导入文章数',default=0)
+    error_msg=models.TextField(verbose_name='错误信息',null=True,blank=True)
+    create_time=models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.url} - {self.status}"
 
 #分类表
 class Category(models.Model):
