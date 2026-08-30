@@ -99,6 +99,17 @@
 
 {% block content %}{% endblock %}
 
+<!-- 网站页脚：展示 ICP 备案号（工信部规定，链接到备案查询系统） -->
+<footer style="text-align:center;padding:20px 0 10px;color:#999;font-size:12px;border-top:1px solid #eee;margin-top:40px;">
+    <p>
+        <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:#999;">
+            鄂ICP备2026046867号-1
+        </a>
+        &nbsp;·&nbsp; Powered by Django
+    </p>
+    <p style="margin-top:5px;">Copyright © 2026 甘振民 版权所有</p>
+</footer>
+
 <script>
     // 修改密码
     $('#edit_password').click(function () {
